@@ -1,0 +1,38 @@
+services:
+  server:
+    container_name: JP-Server
+    env_file:
+      - .env.server
+    build:
+      context: ./
+      dockerfile: springboot.dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Asia/Seoul
+    depends_on:
+      - db
+  db:
+    container_name: JP-DB
+    image: mysql:8.0
+    restart: always
+    env_file:
+      - .env.db
+    ports:
+      - "3306:3306"
+    volumes:
+      - ./db/mysql/data:/var/lib/mysql
+      - ./db/mysql/init:/docker-entrypoint-initdb.d
+    environment:
+      TZ: Asia/Seoul
+  redis:
+    container_name: JP-Redis
+    image: redis:7.2
+    restart: always
+    ports:
+      - "6379:6379"
+    environment:
+      TZ: Asia/Seoul
+
+volumes:
+  db-data:

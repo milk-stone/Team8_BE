@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <title>WebSocket Test with Modal & Drag</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+    <style>
+        .route-creation-mode #itemList { cursor: crosshair; }
+        .selected-waypoint {
+            border: 3px solid #10B981 !important;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.7);
+        }
+        #route-svg-layer {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        .clickable-route {
+            pointer-events: all;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col p-6">
+<h1 class="text-2xl font-bold mb-4">WebSocket Test</h1>
+
+<div class="flex flex-col flex-1 min-h-0">
+    <div class="flex gap-4 mb-4">
+        <div class="bg-white shadow rounded-lg p-4 flex-1">
+            <div class="flex items-center gap-2 mb-4">
+                <label class="font-medium">연결할 Plan ID:</label>
+                <input id="planId" type="number" value="1" class="border rounded p-1 w-24" />
+                <button onclick="connect()" class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600">Connect</button>
+                <button onclick="disconnect()" class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600">Disconnect</button>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <button onclick="initData()" class="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Refresh</button>
+                <button onclick="openModal('waypoint')" class="px-3 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600">Create Waypoint</button>
+                <button onclick="openModal('memo')" class="px-3 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">Create Memo</button>
+                <button id="route-mode-btn" onclick="toggleRouteCreationMode()" class="px-3 py-2 bg-teal-500 text-white rounded hover:bg-teal-600">Create Route</button>
+            </div>
+        </div>
+        <div class="bg-white shadow rounded-lg p-4 flex-1">
+            <h2 class="font-semibold mb-2">로그</h2>
+            <div id="log" class="border rounded p-2 h-32 overflow-auto bg-gray-50 text-sm font-mono break-all whitespace-pre-wrap"></div>
+        </div>
+    </div>
+
+    <div id="board" class="bg-white shadow rounded-lg p-4 flex-1 flex flex-col relative">
+        <h2 class="font-semibold mb-2">전체 목록 (드래그 & 드롭 시 위치 저장)</h2>
+        <div id="itemList" class="border rounded p-2 overflow-auto flex-1 bg-gray-50 relative"></div>
+    </div>
+</div>
+
+<div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-6 w-96 relative">
+        <button onclick="closeModal()" class="absolute top-2 right-2 text-gray-500 hover:text-gray-800">&times;</button>
+        <h2 id="modalTitle" class="text-xl font-semibold mb-4"></h2>
+        <div id="modalBody" class="flex flex-col gap-3"></div>
+        <div id="modalFooter" class="mt-4 flex justify-end gap-2"></div>
+    </div>
+</div>
+
+<script>
+    const subCategoryOptions = {
+        DEFAULT: ["DEFAULT"],
+        FOOD: ["RESTAURANT", "CAFE", "BAR"],
+        CULTURE: ["MUSEUM", "LIBRARY", "CENTER"],
+        ACCOMMODATION: ["HOTEL"],
+        TOUR: ["STORE", "LANDMARK", "ACTIVITY"],
+        TRANSPORTATION: ["AIRPORT", "TERMINAL", "STATION"]
+    };
+
+    let client = null;
+    let waypoints = [], memos = [], routes = [];
+    let isRouteCreationMode = false, startWaypoint = null;
+
+    function log(message, type = "info") {
+        const logBox = document.getElementById("log");
+        const line = document.createElement("div");
+        const typeClasses = { success:"text-green-600", error:"text-red-600", send:"text-blue-600", info:"text-gray-800" };
+        line.className = typeClasses[type] || typeClasses.info;
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        logBox.appendChild(line);
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+    function toLocalDatetimeString(isoString) { if (!isoString) return ""; return isoString.toString().slice(0, 16); }
+
+    function connect() {
+        const planId = document.getElementById("planId").value;
+        if(!planId){ alert("Plan ID를 입력해주세요."); return; }
+        if(client && client.connected){ log("이미 연결되어 있습니다.", "info"); return; }
+        client = new StompJs.Client({
+            // 같은 서버를 쓰는 경우 "/ws"로 가능, 만약 프론트와 백의 서버가 다르다면 "localhost:8080/ws" 와 같이 전체를 입력
+            webSocketFactory: ()=> new SockJS("http://localhost:8080/ws"), reconnectDelay: 5000
+        });
+        client.onConnect = ()=>{
+            log(`✅ Connected to WebSocket for Plan ID: ${planId}`, "success");
+
+            // 🔹 세션 ID 추출 (한 번만)
+            const url = client.webSocket._transport.url;
+            const match = /\/([^\/]+)\/websocket/.exec(url);
+            const sessionId = match ? match[1] : "unknown";
+            log(`📡 내 세션 ID: ${sessionId}`, "info");
+
+            // Waypoints 구독 처리
+            client.subscribe(`/topic/plans/${planId}/waypoints`, (msg)=>{
+                const payload = JSON.parse(msg.body);
+
+                // ✅ senderSessionId 검사 (자기 세션이면 무시)
+                if (payload.senderSessionId && payload.senderSessionId === sessionId) {
+                    log("🚫 자기 세션 메시지 무시 (waypoint)", "error");
+                    return;
+                }
+
+                log("📩 [Waypoints] " + msg.body, "info");
+
+                switch (payload.type) {
+                    case "INIT":
+                        waypoints = payload.WAYPOINT || [];
+                        break;
+                    case "CREATE":
+                        waypoints.push(payload.WAYPOINT);
+                        break;
+                    case "UPDATE":
+                        const idx = waypoints.findIndex(w => w.id === payload.WAYPOINT.id);
+                        if (idx !== -1) waypoints[idx] = payload.WAYPOINT;
+                        else waypoints.push(payload.WAYPOINT);
+                        break;
+                    case "DELETE":
+                        waypoints = waypoints.filter(w => w.id !== payload.WAYPOINT);
+                        break;
+                    default:
+                        log(`⚠️ Unknown waypoint message type: ${payload.type}`, "error");
+                        return;
+                }
+                renderItems();
+            });
+
+            // Memos 구독 처리
+            client.subscribe(`/topic/plans/${planId}/memos`, (msg)=>{
+                const payload = JSON.parse(msg.body);
+                // ✅ senderSessionId 검사 (자기 세션이면 무시)
+                if (payload.senderSessionId && payload.senderSessionId === sessionId) {
+                    log("🚫 자기 세션 메시지 무시 (waypoint)", "error");
+                    return;
+                }
+                log("📩 [Memos] " + msg.body, "info");
+
+                switch (payload.type) {
+                    case "INIT":
+                        memos = payload.MEMO || [];
+                        break;
+                    case "CREATE":
+                        if (payload.MEMO) memos.push(payload.MEMO);
+                        break;
+                    case "UPDATE":
+                        if (payload.MEMO) {
+                            const idx = memos.findIndex(m => m.id === payload.MEMO.id);
+                            if (idx !== -1) memos[idx] = payload.MEMO;
+                        }
+                        break;
+                    case "DELETE":
+                        memos = memos.filter(m => m.id !== payload.MEMO);
+                        break;
+                    default:
+                        log(`⚠️ Unknown memo message type: ${payload.type}`, "error");
+                        return;
+                }
+                renderItems();
+            });
+
+
+            // Routes 구독 처리
+            client.subscribe(`/topic/plans/${planId}/routes`, (msg)=>{
+                const payload = JSON.parse(msg.body);
+                // ✅ senderSessionId 검사 (자기 세션이면 무시)
+                if (payload.senderSessionId && payload.senderSessionId === sessionId) {
+                    log("🚫 자기 세션 메시지 무시 (waypoint)", "error");
+                    return;
+                }
+                log("📩 [Routes] " + msg.body, "info");
+
+                switch (payload.type) {
+                    case "INIT":
+                        routes = payload.ROUTE || [];
+                        break;
+                    case "CREATE":
+                        if (payload.ROUTE) routes.push(payload.ROUTE);
+                        break;
+                    case "UPDATE":
+                        if (payload.ROUTE) {
+                            const idx = routes.findIndex(r => r.id === payload.ROUTE.id);
+                            if (idx !== -1) routes[idx] = payload.ROUTE;
+                        }
+                        break;
+                    case "DELETE":
+                        routes = routes.filter(r => r.id !== payload.ROUTE);
+                        break;
+                    default:
+                        log(`⚠️ Unknown route message type: ${payload.type}`, "error");
+                        return;
+                }
+                renderItems();
+            });
+
+
+            client.subscribe(`/user/queue/errors`, (msg)=>{
+                log("❌ Error: "+msg.body,"error");
+                try{ const error=JSON.parse(msg.body); alert(`에러 발생!\n[${error.code}] ${error.message}`);}catch(e){alert("에러 발생!\n"+msg.body);}
+            });
+            initData();
+        };
+        client.activate();
+    }
+    function disconnect() { if (client) { client.deactivate(); log("🔌 Disconnected", "error"); client = null; } }
+
+    function publish(destination, body = null) {
+        if(!client || !client.connected){ alert("먼저 연결해주세요."); return; }
+        const headers = body?{"content-type":"application/json"}:{};
+        client.publish({destination, body: body?JSON.stringify(body):null, headers});
+        log(`➡️ Sent to ${destination}${body?`: ${JSON.stringify(body)}`:""}`,"send");
+    }
+    function initData() {
+        const planId = document.getElementById("planId").value;
+        publish(`/app/plans/${planId}/waypoints/init`);
+        publish(`/app/plans/${planId}/memos/init`);
+        publish(`/app/plans/${planId}/routes/init`);
+    }
+
+    function createWaypoint(data) { publish(`/app/plans/${document.getElementById("planId").value}/waypoints/create`, data); }
+    function createMemo(data) { publish(`/app/plans/${document.getElementById("planId").value}/memos/create`, data); }
+    function createRoute(data) { publish(`/app/plans/${document.getElementById("planId").value}/routes/create`, data); }
+    function updateWaypoint(id, data) { publish(`/app/plans/${document.getElementById("planId").value}/waypoints/${id}/update`, data); }
+    function updateMemo(id, data) { publish(`/app/plans/${document.getElementById("planId").value}/memos/${id}/update`, data); }
+    function updateRoute(id, data) { publish(`/app/plans/${document.getElementById("planId").value}/routes/${id}/update`, data); }
+    function deleteWaypoint(id) { publish(`/app/plans/${document.getElementById("planId").value}/waypoints/${id}/delete`); }
+    function deleteMemo(id) { publish(`/app/plans/${document.getElementById("planId").value}/memos/${id}/delete`); }
+    function deleteRoute(id) { publish(`/app/plans/${document.getElementById("planId").value}/routes/${id}/delete`); }
+
+    function openModal(type, data = {}) {
+        const modal = document.getElementById("modal");
+        const modalTitle = document.getElementById("modalTitle");
+        const modalBody = document.getElementById("modalBody");
+        const modalFooter = document.getElementById("modalFooter");
+
+        const isCreate = !data.id;
+        let item, title, bodyHtml, footerHtml;
+        const typeCapitalized = type.charAt(0).toUpperCase() + type.slice(1);
+
+        if (isCreate) {
+            title = `새 ${typeCapitalized} 생성`;
+            footerHtml = `<button onclick="submitModal('${type}')" class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">Submit</button>`;
+        } else {
+            title = `${typeCapitalized} 상세 정보`;
+            if (type === 'waypoint') item = waypoints.find(i => i.id === data.id);
+            if (type === 'memo') item = memos.find(i => i.id === data.id);
+            if (type === 'route') item = routes.find(i => i.id === data.id);
+            if (!item) { log(`Error: ${type} with id ${data.id} not found.`, 'error'); return; }
+            footerHtml = `
+            <button onclick="submitModal('${type}', ${data.id})" class="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600">수정하기</button>
+            <button onclick="deleteItem('${type}', ${data.id})" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">삭제하기</button>
+        `;
+        }
+
+        if (type === 'waypoint') {
+            const selectedCategory = item?.locationCategory ?? "DEFAULT";
+            const selectedSubCategory = item?.locationSubCategory ?? "DEFAULT";
+
+            const subOptions = (subCategoryOptions[selectedCategory] || [])
+                .map(opt => `<option value="${opt}" ${opt === selectedSubCategory ? "selected" : ""}>${opt}</option>`)
+                .join("");
+
+            bodyHtml = `
+    <label class="flex flex-col">이름
+      <input id="modalName" class="border rounded p-2" value="${item?.name ?? ''}"/>
+    </label>
+    <label class="flex flex-col">대분류
+      <select id="modalCategory" class="border rounded p-2" onchange="updateSubCategoryOptions()">
+          <option value="DEFAULT" ${selectedCategory === 'DEFAULT' ? 'selected' : ''}>DEFAULT</option>
+          <option value="FOOD" ${selectedCategory === 'FOOD' ? 'selected' : ''}>FOOD</option>
+          <option value="CULTURE" ${selectedCategory === 'CULTURE' ? 'selected' : ''}>CULTURE</option>
+          <option value="ACCOMMODATION" ${selectedCategory === 'ACCOMMODATION' ? 'selected' : ''}>ACCOMMODATION</option>
+          <option value="TOUR" ${selectedCategory === 'TOUR' ? 'selected' : ''}>TOUR</option>
+          <option value="TRANSPORTATION" ${selectedCategory === 'TRANSPORTATION' ? 'selected' : ''}>TRANSPORTATION</option>
+      </select>
+    </label>
+    <label class="flex flex-col">소분류
+      <select id="modalSubCategory" class="border rounded p-2">
+        ${subOptions}
+      </select>
+    </label>
+    <label class="flex flex-col">설명
+      <input id="modalDescription" class="border rounded p-2" value="${item?.description ?? ''}"/>
+    </label>
+    <label class="flex flex-col">주소
+      <input id="modalAddress" class="border rounded p-2" value="${item?.address ?? ''}"/>
+    </label>
+    <label class="flex flex-col">시작 시간
+      <input id="modalStartTime" type="datetime-local" class="border rounded p-2" value="${toLocalDatetimeString(item?.startTime)}"/>
+    </label>
+    <label class="flex flex-col">종료 시간
+      <input id="modalEndTime" type="datetime-local" class="border rounded p-2" value="${toLocalDatetimeString(item?.endTime)}"/>
+    </label>
+  `;
+        } else if (type === 'memo') {
+            bodyHtml = `
+            <label class="flex flex-col">제목<input id="modalName" class="border rounded p-2" value="${item?.title ?? ''}"/></label>
+            <label class="flex flex-col">내용<textarea id="modalContent" class="border rounded p-2 h-24">${item?.content ?? ''}</textarea></label>
+            <label class="flex flex-col">Waypoint ID (선택)
+            <input id="modalWaypointId" type="number" class="border rounded p-2" value="${item?.waypointId ?? ''}"/>
+        </label>
+        <label class="flex flex-col">Route ID (선택)
+            <input id="modalRouteId" type="number" class="border rounded p-2" value="${item?.routeId ?? ''}"/>
+        </label>
+        `;
+        } else if (type === 'route') {
+            const fromWpName = waypoints.find(wp => wp.id === (item?.fromWaypointId ?? data.fromId))?.name;
+            const toWpName = waypoints.find(wp => wp.id === (item?.toWaypointId ?? data.toId))?.name;
+            title = isCreate ? "새 Route 생성" : "Route 상세 정보";
+            bodyHtml = `
+            <div class="text-sm text-gray-600">
+                <p><b>출발:</b> ${fromWpName} (ID: ${item?.fromWaypointId ?? data.fromId})</p>
+                <p><b>도착:</b> ${toWpName} (ID: ${item?.toWaypointId ?? data.toId})</p>
+            </div>
+            <input type="hidden" id="modalFromId" value="${item?.fromWaypointId ?? data.fromId}" />
+            <input type="hidden" id="modalToId" value="${item?.toWaypointId ?? data.toId}" />
+            <label class="flex flex-col">제목<input id="modalTitleInput" class="border rounded p-2" value="${item?.title ?? '새 경로'}"/></label>
+            <label class="flex flex-col">설명<input id="modalDescription" class="border rounded p-2" value="${item?.description ?? ''}"/></label>
+            <label class="flex flex-col">예상 소요 시간 (분)<input id="modalDuration" type="number" step="1" class="border rounded p-2" value="${item?.duration ?? 30}"/></label>
+            <label class="flex flex-col">이동 수단<select id="modalVehicle" class="border rounded p-2">
+                <option value="WALK" ${item?.vehicleCategory === 'WALK' ? 'selected' : ''}>도보</option>
+                <option value="CAR" ${item?.vehicleCategory === 'CAR' ? 'selected' : ''}>자동차</option>
+                <option value="BICYCLE" ${item?.vehicleCategory === 'BICYCLE' ? 'selected' : ''}>자전거</option>
+                <option value="PUBLIC_TRANSPORTATION" ${item?.vehicleCategory === 'PUBLIC_TRANSPORTATION' ? 'selected' : ''}>대중교통</option>
+            </select></label>
+        `;
+        }
+
+        modalTitle.textContent = title;
+        modalBody.innerHTML = bodyHtml;
+        modalFooter.innerHTML = footerHtml;
+        modal.classList.remove("hidden");
+    }
+
+    function closeModal() { document.getElementById("modal").classList.add("hidden"); }
+
+    function submitModal(type, id) {
+        const isCreate = !id;
+        let data;
+
+        if (type === 'waypoint') {
+            const originalWp = isCreate ? {} : waypoints.find(i => i.id === id);
+            data = {
+                name: document.getElementById("modalName").value,
+                description: document.getElementById("modalDescription").value,
+                address: document.getElementById("modalAddress").value,
+                startTime: document.getElementById("modalStartTime").value || null,
+                endTime: document.getElementById("modalEndTime").value || null,
+                locationCategory: document.getElementById("modalCategory").value,
+                locationSubCategory: document.getElementById("modalSubCategory").value, // ✅ 추가
+                xPosition: originalWp.xPosition,
+                yPosition: originalWp.yPosition
+            };
+            if (isCreate) {
+                const board = document.getElementById("board");
+                data.xPosition = board.clientWidth / 2 - 150 + (Math.random() - 0.5) * 200;
+                data.yPosition = board.clientHeight / 2 - 100 + (Math.random() - 0.5) * 200;
+                createWaypoint(data);
+            } else {
+                updateWaypoint(id, data);
+            }
+        } else if (type === 'memo') {
+            const originalMemo = isCreate ? {} : memos.find(i => i.id === id);
+            data = {
+                title: document.getElementById("modalName").value,
+                content: document.getElementById("modalContent").value,
+                waypointId: parseInt(document.getElementById("modalWaypointId").value) || null,
+                routeId: parseInt(document.getElementById("modalRouteId").value) || null,
+                xPosition: originalMemo.xPosition,
+                yPosition: originalMemo.yPosition
+            };
+            if (isCreate) {
+                const board = document.getElementById("board");
+                data.xPosition = board.clientWidth / 2 - 150 + (Math.random() - 0.5) * 200;
+                data.yPosition = board.clientHeight / 2 - 100 + (Math.random() - 0.5) * 200;
+                createMemo(data);
+            } else {
+                updateMemo(id, data);
+            }
+        } else if (type === 'route') {
+            data = {
+                fromWaypointId: parseInt(document.getElementById("modalFromId").value),
+                toWaypointId: parseInt(document.getElementById("modalToId").value),
+                title: document.getElementById("modalTitleInput").value,
+                description: document.getElementById("modalDescription").value,
+                duration: parseFloat(document.getElementById("modalDuration").value),
+                vehicleCategory: document.getElementById("modalVehicle").value
+            };
+            if (isCreate) createRoute(data);
+            else updateRoute(id, data);
+        }
+        closeModal();
+    }
+
+    function deleteItem(type, id) {
+        if (confirm(`${type} 항목(ID: ${id})을(를) 정말 삭제하시겠습니까?`)) {
+            if (type === 'waypoint') deleteWaypoint(id);
+            if (type === 'memo') deleteMemo(id);
+            if (type === 'route') deleteRoute(id);
+            closeModal();
+        }
+    }
+
+    function toggleRouteCreationMode() {
+        isRouteCreationMode = !isRouteCreationMode;
+        const btn = document.getElementById('route-mode-btn');
+        const board = document.getElementById('board');
+        if (isRouteCreationMode) {
+            log("경로 생성 모드 활성화. 시작 Waypoint를 클릭하세요.", "info");
+            btn.textContent = "Cancel Route";
+            btn.classList.replace('bg-teal-500', 'bg-orange-500');
+            btn.classList.replace('hover:bg-teal-600', 'hover:bg-orange-600');
+            board.classList.add('route-creation-mode');
+        } else {
+            log("경로 생성 모드 비활성화.", "info");
+            btn.textContent = "Create Route";
+            btn.classList.replace('bg-orange-500', 'bg-teal-500');
+            btn.classList.replace('hover:bg-orange-600', 'hover:bg-teal-600');
+            board.classList.remove('route-creation-mode');
+            if(startWaypoint) {
+                startWaypoint.element.classList.remove('selected-waypoint');
+            }
+            startWaypoint = null;
+        }
+    }
+
+    function handleWaypointClickForRoute(wpId, element) {
+        if (!isRouteCreationMode) return;
+        if (!startWaypoint) {
+            startWaypoint = { id: wpId, element: element };
+            element.classList.add('selected-waypoint');
+            log(`시작점 선택: Waypoint ${wpId}. 도착점을 선택하세요.`, "info");
+        } else {
+            if (startWaypoint.id === wpId) {
+                log(`시작점 선택 취소: Waypoint ${wpId}.`, "info");
+                startWaypoint.element.classList.remove('selected-waypoint');
+                startWaypoint = null;
+                return;
+            }
+            log(`도착점 선택: Waypoint ${wpId}. 경로 정보를 입력하세요.`, "info");
+            openModal('route', { fromId: startWaypoint.id, toId: wpId });
+            toggleRouteCreationMode();
+        }
+    }
+
+    function createItemCard(config) {
+        const card = document.createElement("div");
+        card.className = `item-card ${config.type}-card border rounded p-4 bg-white shadow-sm flex flex-col gap-3 absolute w-80`;
+        card.style.left = `${config.x || 50}px`;
+        card.style.top = `${config.y || 50}px`;
+        card.style.zIndex = '20';
+        if (config.type === 'waypoint') {
+            card.setAttribute('onclick', `handleWaypointClickForRoute(${config.id}, this)`);
+        }
+        card.dataset.id = config.id;
+        card.dataset.type = config.type;
+
+        card.innerHTML = `
+      <div class="flex justify-between items-start gap-2">
+        <div class="flex-1 flex items-center gap-2 min-w-0">
+          <span class="text-xl">${config.icon}</span>
+          <span class="font-bold truncate ${config.titleClass}">${config.title ?? ''}</span>
+        </div>
+        <button onclick="event.stopPropagation(); openModal('${config.type}', {id: ${config.id}})"
+                class="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm">상세보기</button>
+      </div>
+      <div class="text-sm text-gray-600 truncate">${config.subText || ''}</div>
+    `;
+
+        interact(card).draggable({
+            modifiers: [interact.modifiers.restrictRect({ restriction: "parent" })],
+            listeners: {
+                move(event) {
+                    const target = event.target;
+                    const x = (parseFloat(target.style.left) || 0) + event.dx;
+                    const y = (parseFloat(target.style.top) || 0) + event.dy;
+                    target.style.left = `${x}px`;
+                    target.style.top = `${y}px`;
+                    renderRoutes();
+                },
+                end(event) {
+                    const target = event.target;
+                    const id = parseInt(target.dataset.id);
+                    const type = target.dataset.type;
+
+                    let itemData, updateFn, payload;
+
+                    if (type === 'waypoint') {
+                        itemData = waypoints.find(i => i.id === id);
+                        updateFn = updateWaypoint;
+                        if (!itemData) return;
+                        // 중요: 드래그 종료 시에는 위치 정보만 업데이트하도록 간소화
+                        payload = { ...itemData, xPosition: parseFloat(target.style.left), yPosition: parseFloat(target.style.top) };
+                    } else { // memo
+                        itemData = memos.find(i => i.id === id);
+                        updateFn = updateMemo;
+                        if (!itemData) return;
+                        // 중요: 드래그 종료 시에는 위치 정보만 업데이트하도록 간소화
+                        payload = { ...itemData, xPosition: parseFloat(target.style.left), yPosition: parseFloat(target.style.top) };
+                    }
+
+                    log(`[${type} ${id}] Sending position update...`, "send");
+                    updateFn(id, payload);
+                }
+            }
+        });
+        return card;
+    }
+
+    function renderRoutes() {
+        const container = document.getElementById("itemList");
+        const oldSvgLayer = document.getElementById('route-svg-layer');
+        if (oldSvgLayer) oldSvgLayer.remove();
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.id = 'route-svg-layer';
+        svg.style.overflow = 'visible';
+
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+        marker.id = 'arrowhead';
+        marker.setAttribute('viewBox', '0 -5 10 10');
+        marker.setAttribute('refX', '5');
+        marker.setAttribute('refY', '0');
+        marker.setAttribute('markerWidth', '8');
+        marker.setAttribute('markerHeight', '8');
+        marker.setAttribute('orient', 'auto');
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M0,-5L10,0L0,5');
+        path.setAttribute('fill', '#F97316');
+        marker.appendChild(path);
+        defs.appendChild(marker);
+        svg.appendChild(defs);
+
+        routes.forEach(route => {
+            const fromCard = container.querySelector(`.waypoint-card[data-id='${route.fromWaypointId}']`);
+            const toCard = container.querySelector(`.waypoint-card[data-id='${route.toWaypointId}']`);
+
+            if (fromCard && toCard) {
+                const x1 = parseFloat(fromCard.style.left) + fromCard.offsetWidth / 2;
+                const y1 = parseFloat(fromCard.style.top) + fromCard.offsetHeight / 2;
+                const x2 = parseFloat(toCard.style.left) + toCard.offsetWidth / 2;
+                const y2 = parseFloat(toCard.style.top) + toCard.offsetHeight / 2;
+
+                const midX = (x1 + x2) / 2;
+                const midY = (y1 + y2) / 2;
+
+                const routePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                routePath.setAttribute('d', `M ${x1} ${y1} L ${midX} ${midY} L ${x2} ${y2}`);
+                routePath.setAttribute('stroke', '#F97316');
+                routePath.setAttribute('stroke-width', '3');
+                routePath.setAttribute('fill', 'none');
+                routePath.setAttribute('marker-mid', 'url(#arrowhead)');
+
+                const clickableLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                clickableLine.setAttribute('x1', x1); clickableLine.setAttribute('y1', y1);
+                clickableLine.setAttribute('x2', x2); clickableLine.setAttribute('y2', y2);
+                clickableLine.setAttribute('stroke', 'transparent');
+                clickableLine.setAttribute('stroke-width', '15');
+                clickableLine.classList.add('clickable-route');
+                clickableLine.setAttribute('onclick', `openModal('route', {id: ${route.id}})`);
+
+                svg.appendChild(routePath);
+                svg.appendChild(clickableLine);
+            }
+        });
+        container.prepend(svg);
+    }
+
+    function renderItems() {
+        const container = document.getElementById("itemList");
+        // 기존 카드들을 유지하고 SVG만 새로 그리기 위해 SVG 레이어만 먼저 제거
+        const oldSvgLayer = document.getElementById('route-svg-layer');
+        if (oldSvgLayer) oldSvgLayer.remove();
+
+        // 현재 DOM에 있는 카드들의 ID Set 생성
+        const existingCardIds = new Set();
+        container.querySelectorAll('.item-card').forEach(card => {
+            existingCardIds.add(`${card.dataset.type}-${card.dataset.id}`);
+        });
+
+        const allItems = [
+            ...waypoints.map(item => ({...item, itemType: 'waypoint'})),
+            ...memos.map(item => ({...item, itemType: 'memo'}))
+        ];
+
+        const currentItemIds = new Set();
+
+        // Waypoint와 Memo 렌더링 (추가/업데이트)
+        allItems.forEach(item => {
+            const itemId = `${item.itemType}-${item.id}`;
+            currentItemIds.add(itemId);
+            let card = container.querySelector(`.item-card[data-type='${item.itemType}'][data-id='${item.id}']`);
+
+            // 카드가 없으면 새로 생성
+            if (!card) {
+                let cardConfig;
+                if (item.itemType === 'waypoint') {
+                    cardConfig = { type: 'waypoint', id: item.id, icon: '📍', title: item.name, titleClass: 'text-blue-600', subText: item.description, x: item.xPosition, y: item.yPosition };
+                } else { // memo
+                    cardConfig = { type: 'memo', id: item.id, icon: '📝', title: item.title, titleClass: 'text-purple-700', subText: item.content, x: item.xPosition, y: item.yPosition };
+                }
+                card = createItemCard(cardConfig);
+                container.appendChild(card);
+            } else {
+                // 카드가 이미 있으면 위치와 내용만 업데이트 (드래그 중인 카드 위치는 그대로 둠)
+                if (!card.classList.contains('interact-dragging')) {
+                    card.style.left = `${item.xPosition}px`;
+                    card.style.top = `${item.yPosition}px`;
+                }
+                // 내용 업데이트 (예시: 제목)
+                const titleEl = card.querySelector('.font-bold');
+                const subTextEl = card.querySelector('.text-sm.text-gray-600');
+                if (item.itemType === 'waypoint') {
+                    if (titleEl) titleEl.textContent = item.name;
+                    if (subTextEl) subTextEl.textContent = item.description;
+                } else {
+                    if (titleEl) titleEl.textContent = item.title;
+                    if (subTextEl) subTextEl.textContent = item.content;
+                }
+            }
+        });
+
+        // 삭제된 카드 DOM에서 제거
+        existingCardIds.forEach(cardId => {
+            if (!currentItemIds.has(cardId)) {
+                const [type, id] = cardId.split('-');
+                const cardToRemove = container.querySelector(`.item-card[data-type='${type}'][data-id='${id}']`);
+                if (cardToRemove) cardToRemove.remove();
+            }
+        });
+
+        renderRoutes();
+    }
+
+    function updateSubCategoryOptions() {
+        const category = document.getElementById("modalCategory").value;
+        const subSelect = document.getElementById("modalSubCategory");
+        subSelect.innerHTML = (subCategoryOptions[category] || [])
+            .map(opt => `<option value="${opt}">${opt}</option>`)
+            .join("");
+    }
+
+</script>
+</body>
+</html>

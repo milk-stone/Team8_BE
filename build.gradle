@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '3.5.4'
 	id 'io.spring.dependency-management' version '1.1.7'
+	id 'org.asciidoctor.jvm.convert' version '3.3.2'
 }
 
 group = 'com.kakaotechcampus'
@@ -26,7 +27,7 @@ repositories {
 
 dependencies {
     // * SpringBoot
-    implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
 
     // * SpringBoot JPA
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -34,9 +35,19 @@ dependencies {
     // * SpringBoot Validation
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+	// * Thymeleaf
+	implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+
+	// * Kafka
+	implementation 'org.springframework.kafka:spring-kafka'
+	testImplementation 'org.springframework.kafka:spring-kafka-test'
+
+	// * SpringBoot Websocket
+	implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
     // * Lombok
 	compileOnly 'org.projectlombok:lombok'
-    annotationProcessor 'org.projectlombok:lombok'
+  	annotationProcessor 'org.projectlombok:lombok'
 
     // * H2 Database
 	runtimeOnly 'com.h2database:h2'
@@ -47,8 +58,47 @@ dependencies {
     // * SpringBoot Test
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+	// Flying Saucer Core (equivalent to core-renderer.jar)
+	implementation 'org.xhtmlrenderer:flying-saucer-pdf:9.13.3'
+
+	// * iText 2.0.8
+	implementation 'ognl:ognl:3.1.26'
+
+	// * Password Encoder ( in spring security )
+	implementation 'org.springframework.security:spring-security-crypto:6.4.4'
+  
+	// * Json Web Token
+	compileOnly 'io.jsonwebtoken:jjwt-api:0.12.6'
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
+	// * Swagger UI
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0'
+
+	// * Query DSL
+	implementation 'com.querydsl:querydsl-jpa:5.0.0:jakarta'
+	annotationProcessor "com.querydsl:querydsl-apt:5.0.0:jakarta"
+	annotationProcessor "jakarta.annotation:jakarta.annotation-api"
+	annotationProcessor "jakarta.persistence:jakarta.persistence-api"
+
+	// * Spring Boot Actuator
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+	// * Redisson
+	implementation 'org.redisson:redisson-spring-boot-starter:3.27.2'
+}
+
+ext {
+	set('snippetsDir', file("build/generated-snippets"))
 }
 
 tasks.named('test') {
+	outputs.dir snippetsDir
 	useJUnitPlatform()
+}
+
+tasks.named('asciidoctor') {
+	inputs.dir snippetsDir
+	dependsOn test
 }

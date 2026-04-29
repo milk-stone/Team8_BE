@@ -1,0 +1,22 @@
+spring:
+  config:
+    import: optional:file:dev.env[.properties]
+  application:
+    name: JourneyPlanner
+  datasource:
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: test
+    url: jdbc:h2:mem:journey-planner;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+  thymeleaf:
+    prefix: classpath:/META-INF/templates
+    suffix: .html
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+jwt:
+  secret: 'this-is-a-dummy-secret-key-for-running-tests-12345'
+  access-token-expiration-in-ms: 60000
+  refresh-token-expiration-in-ms: 1200000

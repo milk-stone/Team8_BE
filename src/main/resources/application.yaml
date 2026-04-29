@@ -1,0 +1,53 @@
+spring:
+  config:
+    import: optional:file:dev.env[.properties]
+  application:
+    name: JourneyPlanner
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        use_sql_comments: true
+  datasource:
+    driver-class-name: ${DRIVER_CLASS_NAME}
+    url: jdbc:mysql://${RDS_HOST}:${RDS_PORT}/${RDS_DB_NAME}
+    username: ${RDS_USERNAME}
+    password: ${RDS_PASSWORD}
+    hikari:
+      max-lifetime: 170000
+  thymeleaf:
+    prefix: classpath:/META-INF/templates
+    suffix: .html
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+jwt:
+  secret: ${JWT_SECRET_KEY}
+  access-token-expiration-in-ms: ${JWT_ACCESS_TOKEN_EXPIRATION_IN} # 60000 : 1분
+  refresh-token-expiration-in-ms: ${JWT_REFRESH_TOKEN_EXPIRATION_IN}
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+    tryItOutEnabled: true
+  default-produces-media-type: application/json
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health"
+  endpoint:
+    health:
+      show-details: always

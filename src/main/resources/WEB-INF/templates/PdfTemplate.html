@@ -1,0 +1,398 @@
+<!DOCTYPE>
+<html
+        lang="ko"
+        xmlns:th="http://www.thymeleaf.org"
+>
+<style>
+    * {
+        margin: 0;
+    }
+
+    header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 10px;
+        height: 40px;
+    }
+
+    .content-box {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 40px;
+    }
+
+    footer {
+        color: white;
+        background-color: #2b2a2a;
+
+        display: flex;
+        justify-content: center;
+        align-items: center;
+
+        font-size: 24px;
+        font-weight: bold;
+
+        padding: 16px;
+    }
+
+    hr {
+        margin: 10px;
+    }
+
+    .box {
+        margin-right: 10px;
+        display: inline-block;
+        width: 5px;
+        height: 20px;
+        background-color: #2b2a2a;
+    }
+
+    .traveler-table {
+        width: 80%;
+        border-collapse: collapse;
+        margin: 20px auto;
+        font-family: "Segoe UI", sans-serif;
+        font-size: 14px;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .traveler-table th,
+    .traveler-table td {
+        border: 1px solid #ddd;
+        padding: 12px 15px;
+        text-align: center;
+    }
+
+    .traveler-table th {
+        background-color: #4caf50;
+        color: white;
+        font-weight: bold;
+    }
+
+    .traveler-table tr:nth-child(even) {
+        background-color: #f9f9f9;
+    }
+
+    .traveler-table tr:hover {
+        background-color: #f1f1f1;
+        cursor: pointer;
+    }
+
+    .profile > img {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+    }
+
+    .profile {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .section {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+    }
+</style>
+
+<body>
+<header>
+    <div>
+        <h1>
+            <span style="color: #e59401">J</span>ourney
+            <span style="color: #31B443">P</span>lanner
+        </h1>
+        <p style="font-size: 12px" th:text="${writer}님 외 ${memberCnt}의 여행 계획"></p>
+    </div>
+    <img
+            style="width: 100px"
+            src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/QR_code_for_mobile_English_Wikipedia.svg/640px-QR_code_for_mobile_English_Wikipedia.svg.png"
+            alt="QR_Code"
+    />
+</header>
+
+<main class="content-box">
+    <h2>
+        <div class="box"></div>
+        기본 정보
+    </h2>
+    <hr />
+    <div class="section">
+        <h3>여행 이름</h3>
+        <p>친구들과 함께하는 일본 여행</p>
+    </div>
+    <div class="section">
+        <h3>여행 설명</h3>
+        <p th:text=" 경유 FLEX 힐링 여행">도쿄, 교토, 오사카, 오키나와</p>
+    </div>
+    <div class="section">
+        <h3>여행자</h3>
+        <table class="traveler-table">
+            <tr>
+                <th>이름</th>
+                <th>연락처</th>
+                <th>이메일</th>
+            </tr>
+            <tr>
+                <td>
+                    <div class="profile">
+                        <img
+                                src="data:image/jpeg;base64,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"
+                                alt="profile Image"
+                        />
+                        <p th:text="${writer}"></p>
+                    </div>
+                </td>
+                <td>
+                    <p th:text="{phoneCall}">+81-33-443-1234</p>
+                </td>
+                <td>sunja@nate.net</td>
+            </tr>
+            <tr>
+                <td>
+                    <div class="profile">
+                        <img
+                                src="data:image/jpeg;base64,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"
+                                alt="profile Image"
+                        />
+                        안선우
+                    </div>
+                </td>
+                <td>+82-10-1234-4731</td>
+                <td>parkcs@nate.net</td>
+            </tr>
+            <tr>
+                <td>
+                    <div class="profile">
+                        <img
+                                src="data:image/jpeg;base64,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"
+                                alt="profile Image"
+                        />
+                        안선우
+                    </div>
+                </td>
+                <td>+82-10-1004-9541</td>
+                <td>kimy@naver.com</td>
+            </tr>
+            <tr>
+                <td>
+                    <div class="profile">
+                        <img
+                                src="data:image/jpeg;base64,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"
+                                alt="profile Image"
+                        />
+                        안선우
+                    </div>
+                </td>
+                <td>+82-10-1134-8451</td>
+                <td>younghee@gmail.com</td>
+            </tr>
+            <tr>
+                <td>
+                    <div class="profile">
+                        <img
+                                src="data:image/jpeg;base64,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"
+                                alt="profile Image"
+                        />
+                        안선우
+                    </div>
+                </td>
+                <td>+82-10-5234-4361</td>
+                <td>chulsu@hello.com</td>
+            </tr>
+        </table>
+    </div>
+    <h2>
+        <div class="box"></div>
+        일정 정보
+    </h2>
+    <!-- <ul>
+      <li>인천</li>
+      <li>도쿄</li>
+      <li>교토</li>
+      <li>오사카</li>
+      <li>오키나와</li>
+      <li>부산</li>
+    </ul> -->
+
+    <style>
+        .timeline {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .line-end-marker {
+            width: 10px;
+            height: 2px;
+            background-color: black;
+            transform: translate(-40%, 0);
+        }
+
+        .vertical-line {
+            background-color: black;
+            height: inherit;
+            width: 2px;
+            margin-right: 10px;
+        }
+
+        .vertical-line > .circle {
+            border-radius: 5px;
+            width: 10px;
+            height: 10px;
+            transform: translate(-42%, 80%);
+            border: 2px solid black;
+        }
+
+        .waypoint > .vertical-line > .circle {
+            background-color: #e59401;
+        }
+
+        .edge > .vertical-line > .circle {
+            background-color: #4caf50;
+        }
+
+        .waypoint {
+            display: flex;
+        }
+
+        .waypoint > .info {
+            padding: 16px;
+        }
+
+        .edge {
+            display: flex;
+        }
+
+        .edge > .info {
+            display: flex;
+            flex-direction: column;
+            padding: 16px;
+        }
+
+        .timestamp {
+            margin-right: 10px;
+        }
+    </style>
+
+    <div class="timeline">
+        <div class="line-end-marker"></div>
+
+        <div class="waypoint">
+            <div class="vertical-line">
+                <div class="circle"></div>
+            </div>
+            <div class="timestamp">10:22~11:23</div>
+            <hr />
+            <div class="info">
+                <h2>인천</h2>
+                <div>272 Gonghang-ro, Jung-gu, Incheon</div>
+                <div>1 터미널 집합, OO에어 카운터 수속 후 15번 게이트에서 탑승</div>
+                <h3>메모</h3>
+                <div>여권 챙기기</div>
+            </div>
+        </div>
+
+        <div class="edge">
+            <div class="vertical-line">
+                <div class="circle"></div>
+            </div>
+            <div class="info">
+                <h4>항공기 이동</h4>
+                <div>11:30분 출발, 비행편 링크: https://abcdefg.com</div>
+            </div>
+        </div>
+
+        <div class="waypoint">
+            <div class="vertical-line">
+                <div class="circle"></div>
+            </div>
+            <div class="timestamp">10:22~11:23</div>
+            <hr />
+            <div class="info">
+                <h2>LA</h2>
+                <div>272 Gonghang-ro, Jung-gu, Incheon</div>
+                <div>1 터미널 집합, OO에어 카운터 수속 후 15번 게이트에서 탑승</div>
+                <h3>메모</h3>
+                <div>여권 챙기기</div>
+            </div>
+        </div>
+
+        <div class="edge">
+            <div class="vertical-line">
+                <div class="circle"></div>
+            </div>
+            <div class="info">
+                <h4>차량 이동</h4>
+                <div>여행사 픽업 에정, 차량번호 452VFH</div>
+            </div>
+        </div>
+
+        <div class="waypoint">
+            <div class="vertical-line">
+                <div class="circle"></div>
+            </div>
+            <div class="timestamp">13:25~14:25</div>
+            <hr />
+            <div class="info">
+                <h2>호텔</h2>
+                <div>272 Hotel-ro, 42-21 street, USA</div>
+                <div>호캉스 즐기기</div>
+                <h3>메모</h3>
+                <div>호캉스 제대로 즐기기</div>
+            </div>
+        </div>
+
+        <div class="edge">
+            <div class="vertical-line">
+                <div class="circle"></div>
+            </div>
+            <div class="info">
+                <h4>택시 이동</h4>
+                <div>우버 예약, 예상 금액 50 USD</div>
+            </div>
+        </div>
+
+        <div class="waypoint">
+            <div class="vertical-line">
+                <div class="circle"></div>
+            </div>
+            <div class="timestamp">20:22~20:23</div>
+            <hr />
+            <div class="info">
+                <h2>한국</h2>
+                <div>272 Gonghang-ro, Jung-gu, Incheon</div>
+                <div>1 터미널 해산</div>
+                <h3>메모</h3>
+                <div>집 조심히 들어가기</div>
+            </div>
+        </div>
+
+        <div class="line-end-marker"></div>
+    </div>
+
+    <hr />
+    <h2>
+        <div class="box"></div>
+        추가 메모
+    </h2>
+    <h3>준비물</h3>
+    <ul>
+        <li>정신</li>
+        <li>개념</li>
+        <li>여권</li>
+        <li>칫솔</li>
+        <li>돈</li>
+        <li>가방</li>
+    </ul>
+    <hr />
+</main>
+
+<footer>Journey Planner exported PDF</footer>
+</body>
+</html>

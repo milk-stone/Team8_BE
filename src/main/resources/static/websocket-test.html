@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <title>WebSocket Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-6">
+<h1 class="text-2xl font-bold mb-4">WebSocket Test</h1>
+
+<div class="flex w-full max-w-6xl gap-4">
+    <div class="flex-1 flex flex-col gap-4 min-w-0">
+        <div class="bg-white shadow rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-3">
+                <label class="font-medium whitespace-nowrap">Plan ID:</label>
+                <input id="planId" type="number" value="1" class="border rounded p-1 w-24" />
+                <button onclick="connect()" class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600">Connect</button>
+                <button onclick="disconnect()" class="px-3 py-1 bg-red-500 text-white rounded hover:bg-red-600">Disconnect</button>
+            </div>
+            <div class="flex items-center gap-2 mb-4">
+                <label class="font-medium whitespace-nowrap">JWT Token:</label>
+                <input id="jwtToken" type="text" placeholder="없으면 게스트 연결" class="border rounded p-1 flex-1 text-sm" />
+            </div>
+            <div class="flex gap-2 mb-4">
+                <button onclick="initData()" class="flex-1 px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">Refresh</button>
+                <button onclick="createWaypoint()" class="flex-1 px-3 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600">Create Waypoint</button>
+                <button onclick="createMemo()" class="flex-1 px-3 py-2 bg-purple-500 text-white rounded hover:bg-purple-600">Create Memo</button>
+                <button onclick="createRoute()" class="flex-1 px-3 py-2 bg-teal-500 text-white rounded hover:bg-teal-600">Create Route</button>
+            </div>
+        </div>
+
+        <div class="bg-white shadow rounded-lg p-4">
+            <h2 class="font-semibold mb-2">새 Waypoint 입력</h2>
+            <div class="grid grid-cols-2 gap-3">
+                <label class="flex flex-col">이름<input type="text" id="wpName" class="border rounded p-2" /></label>
+                <label class="flex flex-col">카테고리
+                    <select id="wpCategory" class="border rounded p-2">
+                        <option value="" selected disabled>카테고리 선택</option>
+                        <option value="DEFAULT">DEFAULT</option>
+                        <option value="RESTAURANT">RESTAURANT</option>
+                        <option value="CAFE">CAFE</option>
+                        <option value="BAR">BAR</option>
+                        <option value="MUSEUM">MUSEUM</option>
+                        <option value="LIBRARY">LIBRARY</option>
+                        <option value="CENTER">CENTER</option>
+                        <option value="HOTEL">HOTEL</option>
+                        <option value="STORE">STORE</option>
+                        <option value="LANDMARK">LANDMARK</option>
+                        <option value="ACTIVITY">ACTIVITY</option>
+                        <option value="AIRPORT">AIRPORT</option>
+                        <option value="TERMINAL">TERMINAL</option>
+                        <option value="STATION">STATION</option>
+                    </select>
+                </label>
+                <label class="flex flex-col col-span-2">설명<input type="text" id="wpDescription" class="border rounded p-2" /></label>
+                <label class="flex flex-col col-span-2">주소<input type="text" id="wpAddress" class="border rounded p-2" /></label>
+                <label class="flex flex-col">시작 시간<input type="datetime-local" id="wpStartTime" class="border rounded p-2" /></label>
+                <label class="flex flex-col">종료 시간<input type="datetime-local" id="wpEndTime" class="border rounded p-2" /></label>
+                <label class="flex flex-col">X 좌표 (float)<input type="number" id="wpX" step="0.01" class="border rounded p-2" /></label>
+                <label class="flex flex-col">Y 좌표 (float)<input type="number" id="wpY" step="0.01" class="border rounded p-2" /></label>
+            </div>
+        </div>
+
+        <div class="bg-white shadow rounded-lg p-4">
+            <h2 class="font-semibold mb-2">새 Memo 입력</h2>
+            <div class="grid grid-cols-2 gap-3">
+                <label class="flex flex-col col-span-2">제목<input type="text" id="memoTitle" class="border rounded p-2" /></label>
+                <label class="flex flex-col col-span-2">내용<input type="text" id="memoContent" class="border rounded p-2" /></label>
+                <label class="flex flex-col">X 좌표 (float)<input type="number" id="memoX" step="0.01" class="border rounded p-2" /></label>
+                <label class="flex flex-col">Y 좌표 (float)<input type="number" id="memoY" step="0.01" class="border rounded p-2" /></label>
+            </div>
+        </div>
+
+        <!-- 🔽 새 Route 입력 -->
+        <div class="bg-white shadow rounded-lg p-4">
+            <h2 class="font-semibold mb-2">새 Route 입력</h2>
+            <div class="grid grid-cols-2 gap-3">
+                <label class="flex flex-col">출발 웨이포인트 ID
+                    <input type="number" id="routeFrom" class="border rounded p-2" />
+                </label>
+                <label class="flex flex-col">도착 웨이포인트 ID
+                    <input type="number" id="routeTo" class="border rounded p-2" />
+                </label>
+                <label class="flex flex-col col-span-2">제목
+                    <input type="text" id="routeTitle" class="border rounded p-2" />
+                </label>
+                <label class="flex flex-col col-span-2">설명
+                    <input type="text" id="routeDescription" class="border rounded p-2" />
+                </label>
+                <label class="flex flex-col">소요 시간(분)
+                    <input type="number" step="0.1" id="routeDuration" class="border rounded p-2" />
+                </label>
+                <label class="flex flex-col">이동수단
+                    <select id="routeVehicle" class="border rounded p-2">
+                        <option value="DEFAULT">DEFAULT</option>
+                        <option value="WALK">WALK</option>
+                        <option value="BUS">BUS</option>
+                        <option value="TAXI">TAXI</option>
+                        <option value="CAR">CAR</option>
+                        <option value="BICYCLE">BICYCLE</option>
+                        <option value="AIRPLANE">AIRPLANE</option>
+                        <option value="TRAIN">TRAIN</option>
+                        <option value="SHIP">SHIP</option>
+                        <option value="MOTORCYCLE">MOTORCYCLE</option>
+                        <option value="SCOOTER">SCOOTER</option>
+                    </select>
+                </label>
+            </div>
+        </div>
+
+        <!-- 이력 조회 -->
+        <div class="bg-white shadow rounded-lg p-4">
+            <h2 class="font-semibold mb-2">이력 조회</h2>
+            <div class="flex gap-2 mb-2">
+                <input id="historyNodeId" type="number" placeholder="Node ID" class="border rounded p-1 w-28" />
+                <select id="historyNodeSort" class="border rounded p-1">
+                    <option value="MEMO">MEMO</option>
+                    <option value="WAYPOINT">WAYPOINT</option>
+                    <option value="ROUTE">ROUTE</option>
+                </select>
+                <button onclick="fetchHistory()" class="px-3 py-1 bg-purple-500 text-white rounded hover:bg-purple-600">조회</button>
+            </div>
+            <div id="historyResult" class="border rounded p-2 max-h-48 overflow-auto bg-gray-50 text-sm"></div>
+        </div>
+
+        <div class="bg-white shadow rounded-lg p-4 flex-1 min-w-0">
+            <h2 class="font-semibold mb-2">로그</h2>
+            <div id="log" class="border rounded p-2 h-64 overflow-auto bg-gray-50 text-sm font-mono break-all whitespace-pre-wrap"></div>
+        </div>
+    </div>
+
+    <div class="flex-1">
+        <div class="bg-white shadow rounded-lg p-4 h-full flex flex-col">
+            <h2 class="font-semibold mb-2">전체 목록</h2>
+            <div id="itemList" class="border rounded p-2 overflow-auto flex-1 bg-gray-50"></div>
+        </div>
+    </div>
+</div>
+</body>
+
+<script>
+    let client = null;
+    let waypoints = [];
+    let memos = [];
+    let routes = [];
+
+    // ---------- 유틸리티 함수 ----------
+    function log(message, type = "info") {
+        const logBox = document.getElementById("log");
+        const line = document.createElement("div");
+        const typeClasses = {
+            success: "text-green-600",
+            error: "text-red-600",
+            send: "text-blue-600",
+            info: "text-gray-800",
+        };
+        line.className = typeClasses[type] || typeClasses.info;
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        logBox.appendChild(line);
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function parseOrNull(numStr) {
+        if (!numStr || numStr.trim() === "") return null;
+        const n = parseFloat(numStr);
+        return isNaN(n) ? null : n;
+    }
+
+    function toLocalDatetimeString(isoString) {
+        if (!isoString) return "";
+        return isoString.toString().slice(0, 16);
+    }
+
+    // ---------- WebSocket 연결 ----------
+    function connect() {
+        const planId = document.getElementById("planId").value;
+        if (!planId) {
+            alert("Plan ID를 입력해주세요.");
+            return;
+        }
+
+        if (client && client.connected) {
+            log("이미 연결되어 있습니다.", "info");
+            return;
+        }
+
+        const token = document.getElementById("jwtToken").value.trim();
+        const connectHeaders = token ? { "Authorization": `Bearer ${token}` } : {};
+
+        client = new StompJs.Client({
+            webSocketFactory: () => new SockJS("http://localhost:8080/ws"),
+            connectHeaders,
+            reconnectDelay: 0,
+            onStompError: (frame) => {
+                log(`❌ STOMP ERROR: ${frame.headers?.message || JSON.stringify(frame.headers)}`, "error");
+            }
+        });
+
+        client.onConnect = () => {
+            log(`✅ Connected | Plan: ${planId} | ${token ? "인증됨" : "게스트"}`, "success");
+
+            // Waypoints 구독
+            client.subscribe(`/topic/plans/${planId}/waypoints`, (msg) => {
+                log("📩 [Waypoints] " + msg.body, "info");
+                const payload = JSON.parse(msg.body);
+                if (payload.type === "INIT") {
+                    waypoints = payload.WAYPOINT ?? [];
+                } else if (payload.type === "CREATE") {
+                    waypoints.push(payload.WAYPOINT);
+                } else if (payload.type === "UPDATE") {
+                    waypoints = waypoints.map(w => w.id === payload.WAYPOINT.id ? payload.WAYPOINT : w);
+                } else if (payload.type === "DELETE") {
+                    waypoints = waypoints.filter(w => w.id !== payload.WAYPOINT);
+                }
+                renderItems();
+            });
+
+            // Memos 구독
+            client.subscribe(`/topic/plans/${planId}/memos`, (msg) => {
+                log("📩 [Memos] " + msg.body, "info");
+                const payload = JSON.parse(msg.body);
+                if (payload.type === "INIT") {
+                    memos = payload.MEMO ?? [];
+                } else if (payload.type === "CREATE") {
+                    memos.push(payload.MEMO);
+                } else if (payload.type === "UPDATE") {
+                    memos = memos.map(m => m.id === payload.MEMO.id ? payload.MEMO : m);
+                } else if (payload.type === "DELETE") {
+                    memos = memos.filter(m => m.id !== payload.MEMO);
+                }
+                renderItems();
+            });
+
+            // Routes 구독
+            client.subscribe(`/topic/plans/${planId}/routes`, (msg) => {
+                log("📩 [Routes] " + msg.body, "info");
+                const payload = JSON.parse(msg.body);
+                if (payload.type === "INIT") {
+                    routes = payload.ROUTE ?? [];
+                } else if (payload.type === "CREATE") {
+                    routes.push(payload.ROUTE);
+                } else if (payload.type === "UPDATE") {
+                    routes = routes.map(r => r.id === payload.ROUTE.id ? payload.ROUTE : r);
+                } else if (payload.type === "DELETE") {
+                    routes = routes.filter(r => r.id !== payload.ROUTE);
+                }
+                renderItems();
+            });
+
+            // 에러 구독
+            client.subscribe(`/user/queue/errors`, (msg) => {
+                log("❌ Error: " + msg.body, "error");
+                try {
+                    const error = JSON.parse(msg.body);
+                    alert(`에러 발생!\n[${error.code}] ${error.message}`);
+                } catch (e) {
+                    alert("에러 발생!\n" + msg.body);
+                }
+            });
+
+            initData(); // 연결되면 init 요청
+        };
+
+        client.activate();
+    }
+
+    function disconnect() {
+        if (client) {
+            client.deactivate();
+            log("🔌 Disconnected", "error");
+            client = null;
+        }
+    }
+
+    // ---------- 서버 요청 ----------
+    function publish(destination, body = null) {
+        if (!client || !client.connected) {
+            alert("먼저 연결해주세요.");
+            return;
+        }
+        const headers = body ? { "content-type": "application/json" } : {};
+        client.publish({ destination, body: body ? JSON.stringify(body) : null, headers });
+        log(`➡️ Sent to ${destination}${body ? `: ${JSON.stringify(body)}` : ""}`, "send");
+    }
+
+    function initData() {
+        const planId = document.getElementById("planId").value;
+        publish(`/app/plans/${planId}/waypoints/init`);
+        publish(`/app/plans/${planId}/memos/init`);
+        publish(`/app/plans/${planId}/routes/init`);
+    }
+
+    // ---------- Waypoint ----------
+    function createWaypoint() {
+        const planId = document.getElementById("planId").value;
+        const waypoint = {
+            name: document.getElementById("wpName").value,
+            description: document.getElementById("wpDescription").value,
+            address: document.getElementById("wpAddress").value,
+            startTime: document.getElementById("wpStartTime").value || null,
+            endTime: document.getElementById("wpEndTime").value || null,
+            locationCategory: document.getElementById("wpCategory").value || null,
+            xPosition: parseOrNull(document.getElementById("wpX").value),
+            yPosition: parseOrNull(document.getElementById("wpY").value),
+        };
+        publish(`/app/plans/${planId}/waypoints/create`, waypoint);
+    }
+
+    function updateWaypointById(waypointId, card) {
+        const planId = document.getElementById("planId").value;
+        const updatedWaypoint = {
+            name: card.querySelector(".item-name").value,
+            description: card.querySelector(".wp-description").value,
+            address: card.querySelector(".wp-address").value,
+            startTime: card.querySelector(".wp-startTime").value || null,
+            endTime: card.querySelector(".wp-endTime").value || null,
+            locationCategory: card.querySelector(".wp-category").value || null,
+            xPosition: parseOrNull(card.querySelector(".wp-x").value),
+            yPosition: parseOrNull(card.querySelector(".wp-y").value),
+        };
+        publish(`/app/plans/${planId}/waypoints/${waypointId}/update`, updatedWaypoint);
+    }
+
+    function deleteWaypointById(waypointId) {
+        const planId = document.getElementById("planId").value;
+        publish(`/app/plans/${planId}/waypoints/${waypointId}/delete`);
+    }
+
+    // ---------- Memo ----------
+    function createMemo() {
+        const planId = document.getElementById("planId").value;
+        const memo = {
+            title: document.getElementById("memoTitle").value,
+            content: document.getElementById("memoContent").value,
+            xPosition: parseOrNull(document.getElementById("memoX").value),
+            yPosition: parseOrNull(document.getElementById("memoY").value),
+        };
+        publish(`/app/plans/${planId}/memos/create`, memo);
+    }
+
+    function updateMemoById(memoId, card) {
+        const planId = document.getElementById("planId").value;
+        const updatedMemo = {
+            title: card.querySelector(".item-name").value,
+            content: card.querySelector(".memo-content").value,
+            xPosition: parseOrNull(card.querySelector(".memo-x").value),
+            yPosition: parseOrNull(card.querySelector(".memo-y").value),
+        };
+        publish(`/app/plans/${planId}/memos/${memoId}/update`, updatedMemo);
+    }
+
+    function deleteMemoById(memoId) {
+        const planId = document.getElementById("planId").value;
+        publish(`/app/plans/${planId}/memos/${memoId}/delete`);
+    }
+
+    // ---------- Route ----------
+    function createRoute() {
+        const planId = document.getElementById("planId").value;
+        const route = {
+            fromWaypointId: parseInt(document.getElementById("routeFrom").value),
+            toWaypointId: parseInt(document.getElementById("routeTo").value),
+            title: document.getElementById("routeTitle").value,
+            description: document.getElementById("routeDescription").value,
+            duration: parseFloat(document.getElementById("routeDuration").value),
+            vehicleCategory: document.getElementById("routeVehicle").value,
+        };
+        publish(`/app/plans/${planId}/routes/create`, route);
+    }
+
+    function updateRouteById(routeId, card) {
+        const planId = document.getElementById("planId").value;
+        const updatedRoute = {
+            fromWaypointId: parseInt(card.querySelector(".route-from").value),
+            toWaypointId: parseInt(card.querySelector(".route-to").value),
+            title: card.querySelector(".item-name").value,
+            description: card.querySelector(".route-description").value,
+            duration: parseFloat(card.querySelector(".route-duration").value),
+            vehicleCategory: card.querySelector(".route-vehicle").value,
+        };
+        publish(`/app/plans/${planId}/routes/${routeId}/update`, updatedRoute);
+    }
+
+    function deleteRouteById(routeId) {
+        const planId = document.getElementById("planId").value;
+        publish(`/app/plans/${planId}/routes/${routeId}/delete`);
+    }
+
+    // ---------- 이력 조회 ----------
+    async function fetchHistory() {
+        const planId = document.getElementById("planId").value;
+        const nodeId = document.getElementById("historyNodeId").value;
+        const nodeSort = document.getElementById("historyNodeSort").value;
+        const token = document.getElementById("jwtToken").value.trim();
+        if (!nodeId) return alert("Node ID를 입력하세요");
+
+        const headers = {};
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        const resultBox = document.getElementById("historyResult");
+        try {
+            const res = await fetch(`/plans/${planId}/nodes/${nodeId}/history?nodeSort=${nodeSort}`, { headers });
+            if (!res.ok) {
+                const err = await res.json();
+                resultBox.innerHTML = `<span class="text-red-500">❌ [${err.code}] ${err.message}</span>`;
+                return;
+            }
+            const data = await res.json();
+            if (data.length === 0) {
+                resultBox.innerHTML = `<span class="text-gray-400">이력 없음</span>`;
+                return;
+            }
+            resultBox.innerHTML = data.map((h, i) =>
+                `<div class="border-b py-1">
+                    <span class="text-purple-600 font-semibold">#${i + 1}</span>
+                    memberId: <b>${h.memberId}</b> |
+                    editedAt: <b>${new Date(h.editedAt).toLocaleString()}</b>
+                    <details class="text-xs text-gray-500 mt-1 ml-2">
+                        <summary>snapshot 보기</summary>
+                        <pre class="bg-gray-100 p-1 rounded overflow-auto">${JSON.stringify(JSON.parse(h.snapshot), null, 2)}</pre>
+                    </details>
+                </div>`
+            ).join("");
+        } catch (e) {
+            resultBox.innerHTML = `<span class="text-red-500">요청 실패: ${e.message}</span>`;
+        }
+    }
+
+    function showHistory(nodeId, nodeSort) {
+        document.getElementById("historyNodeId").value = nodeId;
+        document.getElementById("historyNodeSort").value = nodeSort;
+        fetchHistory();
+        document.getElementById("historyResult").scrollIntoView({ behavior: "smooth" });
+    }
+
+    // ---------- 렌더링 ----------
+    function createWaypointFields(wp) {
+        return `
+            <label class="flex flex-col text-sm">설명
+                <input class="wp-description border rounded p-2" value="${wp.description ?? ''}" />
+            </label>
+            <label class="flex flex-col text-sm">주소
+                <input class="wp-address border rounded p-2" value="${wp.address ?? ''}" />
+            </label>
+            <div class="grid grid-cols-2 gap-3 text-sm">
+                <label class="flex flex-col">시작 시간
+                    <input type="datetime-local" class="wp-startTime border rounded p-2" value="${toLocalDatetimeString(wp.startTime)}" />
+                </label>
+                <label class="flex flex-col">종료 시간
+                    <input type="datetime-local" class="wp-endTime border rounded p-2" value="${toLocalDatetimeString(wp.endTime)}" />
+                </label>
+            </div>
+            <div class="grid grid-cols-3 gap-3 text-sm">
+                <label class="flex flex-col">카테고리
+                    <select class="wp-category border rounded p-2">
+                        <option value="DEFAULT" ${wp.locationCategory === 'DEFAULT' ? 'selected' : ''}>DEFAULT</option>
+                        <option value="RESTAURANT" ${wp.locationCategory === 'RESTAURANT' ? 'selected' : ''}>RESTAURANT</option>
+                        <option value="CAFE" ${wp.locationCategory === 'CAFE' ? 'selected' : ''}>CAFE</option>
+                        <option value="BAR" ${wp.locationCategory === 'BAR' ? 'selected' : ''}>BAR</option>
+                        <option value="MUSEUM" ${wp.locationCategory === 'MUSEUM' ? 'selected' : ''}>MUSEUM</option>
+                        <option value="LIBRARY" ${wp.locationCategory === 'LIBRARY' ? 'selected' : ''}>LIBRARY</option>
+                        <option value="CENTER" ${wp.locationCategory === 'CENTER' ? 'selected' : ''}>CENTER</option>
+                        <option value="HOTEL" ${wp.locationCategory === 'HOTEL' ? 'selected' : ''}>HOTEL</option>
+                        <option value="STORE" ${wp.locationCategory === 'STORE' ? 'selected' : ''}>STORE</option>
+                        <option value="LANDMARK" ${wp.locationCategory === 'LANDMARK' ? 'selected' : ''}>LANDMARK</option>
+                        <option value="ACTIVITY" ${wp.locationCategory === 'ACTIVITY' ? 'selected' : ''}>ACTIVITY</option>
+                        <option value="AIRPORT" ${wp.locationCategory === 'AIRPORT' ? 'selected' : ''}>AIRPORT</option>
+                        <option value="TERMINAL" ${wp.locationCategory === 'TERMINAL' ? 'selected' : ''}>TERMINAL</option>
+                        <option value="STATION" ${wp.locationCategory === 'STATION' ? 'selected' : ''}>STATION</option>
+                    </select>
+                </label>
+                <label class="flex flex-col">X 좌표
+                    <input type="number" step="0.01" class="wp-x border rounded p-2" value="${wp.xPosition ?? ''}" />
+                </label>
+                <label class="flex flex-col">Y 좌표
+                    <input type="number" step="0.01" class="wp-y border rounded p-2" value="${wp.yPosition ?? ''}" />
+                </label>
+            </div>
+        `;
+    }
+
+    function createMemoFields(memo) {
+        return `
+            <label class="flex flex-col text-sm">내용
+                <input class="memo-content border rounded p-2" value="${memo.content ?? ''}" />
+            </label>
+            <div class="grid grid-cols-2 gap-3 text-sm">
+                <label class="flex flex-col">X 좌표
+                    <input type="number" step="0.01" class="memo-x border rounded p-2" value="${memo.xPosition ?? ''}" />
+                </label>
+                <label class="flex flex-col">Y 좌표
+                    <input type="number" step="0.01" class="memo-y border rounded p-2" value="${memo.yPosition ?? ''}" />
+                </label>
+            </div>
+        `;
+    }
+
+    function createRouteFields(r) {
+        return `
+            <label class="flex flex-col text-sm">출발 웨이포인트
+                <input type="number" class="route-from border rounded p-2" value="${r.fromWaypointId}" />
+            </label>
+            <label class="flex flex-col text-sm">도착 웨이포인트
+                <input type="number" class="route-to border rounded p-2" value="${r.toWaypointId}" />
+            </label>
+            <label class="flex flex-col text-sm">설명
+                <input class="route-description border rounded p-2" value="${r.description ?? ''}" />
+            </label>
+            <div class="grid grid-cols-2 gap-3 text-sm">
+                <label class="flex flex-col">소요 시간
+                    <input type="number" step="0.1" class="route-duration border rounded p-2" value="${r.duration ?? ''}" />
+                </label>
+                <label class="flex flex-col">이동수단
+                    <select class="route-vehicle border rounded p-2">
+                        <option value="DEFAULT" ${r.vehicleCategory === 'DEFAULT' ? 'selected' : ''}>DEFAULT</option>
+                        <option value="WALK" ${r.vehicleCategory === 'WALK' ? 'selected' : ''}>WALK</option>
+                        <option value="BUS" ${r.vehicleCategory === 'BUS' ? 'selected' : ''}>BUS</option>
+                        <option value="TAXI" ${r.vehicleCategory === 'TAXI' ? 'selected' : ''}>TAXI</option>
+                        <option value="CAR" ${r.vehicleCategory === 'CAR' ? 'selected' : ''}>CAR</option>
+                        <option value="BICYCLE" ${r.vehicleCategory === 'BICYCLE' ? 'selected' : ''}>BICYCLE</option>
+                        <option value="AIRPLANE" ${r.vehicleCategory === 'AIRPLANE' ? 'selected' : ''}>AIRPLANE</option>
+                        <option value="TRAIN" ${r.vehicleCategory === 'TRAIN' ? 'selected' : ''}>TRAIN</option>
+                        <option value="SHIP" ${r.vehicleCategory === 'SHIP' ? 'selected' : ''}>SHIP</option>
+                        <option value="MOTORCYCLE" ${r.vehicleCategory === 'MOTORCYCLE' ? 'selected' : ''}>MOTORCYCLE</option>
+                        <option value="SCOOTER" ${r.vehicleCategory === 'SCOOTER' ? 'selected' : ''}>SCOOTER</option>
+                    </select>
+                </label>
+            </div>
+        `;
+    }
+
+    function createItemCard(config) {
+        const card = document.createElement("div");
+        card.className = `item-card ${config.type}-card border rounded p-4 bg-white shadow-sm mb-3 flex flex-col gap-3`;
+        card.innerHTML = `
+            <div class="flex justify-between items-start gap-2">
+                <div class="flex-1 flex items-center gap-2">
+                    <span class="text-xl">${config.icon}</span>
+                    <input class="item-name border rounded p-2 flex-1 font-bold ${config.titleClass}" value="${config.title ?? ''}" />
+                </div>
+                <div class="flex gap-1">
+                    <button onclick="${config.updateFn}(${config.id}, this.closest('.item-card'))"
+                        class="px-2 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600 text-sm">수정</button>
+                    <button onclick="${config.deleteFn}(${config.id})"
+                        class="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-sm">삭제</button>
+                    <button onclick="showHistory(${config.id}, '${config.nodeSort}')"
+                        class="px-2 py-1 bg-purple-500 text-white rounded hover:bg-purple-600 text-sm">이력</button>
+                </div>
+            </div>
+            ${config.fieldsHtml}
+        `;
+        return card;
+    }
+
+    function renderItems() {
+        const container = document.getElementById("itemList");
+        container.innerHTML = "";
+
+        // Waypoints
+        waypoints.forEach((wp) => {
+            const card = createItemCard({
+                type: 'waypoint', nodeSort: 'WAYPOINT',
+                id: wp.id, icon: '📍', title: wp.name,
+                titleClass: 'text-blue-600',
+                fieldsHtml: createWaypointFields(wp),
+                updateFn: 'updateWaypointById', deleteFn: 'deleteWaypointById'
+            });
+            container.appendChild(card);
+        });
+
+        memos.forEach((memo) => {
+            const card = createItemCard({
+                type: 'memo', nodeSort: 'MEMO',
+                id: memo.id, icon: '📝', title: memo.title,
+                titleClass: 'text-purple-700',
+                fieldsHtml: createMemoFields(memo),
+                updateFn: 'updateMemoById', deleteFn: 'deleteMemoById'
+            });
+            container.appendChild(card);
+        });
+
+        routes.forEach((r) => {
+            const card = createItemCard({
+                type: 'route', nodeSort: 'ROUTE',
+                id: r.id, icon: '🛣️', title: r.title,
+                titleClass: 'text-teal-700',
+                fieldsHtml: createRouteFields(r),
+                updateFn: 'updateRouteById', deleteFn: 'deleteRouteById'
+            });
+            container.appendChild(card);
+        });
+    }
+</script>
+</html>

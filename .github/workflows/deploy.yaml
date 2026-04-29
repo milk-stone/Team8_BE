@@ -1,0 +1,62 @@
+name: Deploy to EC2
+
+on:
+  workflow_run:
+    workflows: ["Generate and Commit AsyncAPI Docs to Project"]
+    types:
+      - completed
+    branches:
+      - develop
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    # 문서 생성에 실패해도 배포는 진행
+    if: ${{ always() }}
+    steps:
+      # 1. 소스 코드 체크아웃
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # 2. JDK 17 설정
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # 3. gradlew 파일에 실행 권한 부여
+      - name: Grant execute permission for gradlew
+        run: chmod +x ./gradlew
+
+      # 4. Gradle 테스트 실행
+      - name: Test with Gradle
+        run: ./gradlew test
+
+      # 5. Gradle 빌드
+      - name: Build with Gradle
+        run: ./gradlew build -x test
+
+      # 6. 빌드된 JAR 파일을 서버로 전송
+      - name: Transfer Jar to Server
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          source: "./build/libs/*.jar"
+          target: "/home/ubuntu/JourneyPlanner/build"
+          strip_components: 2
+
+      # 7. 서버에 접속하여 배포 스크립트 실행
+      - name: Execute Deploy Script on Server
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            bash /home/ubuntu/JourneyPlanner/deploy.sh

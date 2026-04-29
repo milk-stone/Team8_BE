@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Memo WebSocket Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-6">
+
+<h1 class="text-2xl font-bold mb-4">📝 Memo WebSocket Test</h1>
+
+<div class="flex flex-wrap gap-3 mb-4 w-full max-w-5xl">
+    <input id="planId" type="number" value="1" placeholder="Plan ID"
+           class="border rounded p-2 w-24">
+    <input id="jwtToken" type="text" placeholder="JWT Token (없으면 게스트)"
+           class="border rounded p-2 flex-1 min-w-[300px] text-sm">
+    <button onclick="connect()"
+            class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">Connect</button>
+    <button onclick="disconnect()"
+            class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">Disconnect</button>
+    <button onclick="createMemoCard()"
+            class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">+ 새 메모</button>
+</div>
+
+<!-- 로그 -->
+<div class="w-full max-w-5xl mb-4">
+    <div class="flex justify-between items-center mb-1">
+        <span class="text-sm font-semibold text-gray-600">로그</span>
+        <button onclick="clearLog()" class="text-xs text-gray-400 hover:text-gray-600">지우기</button>
+    </div>
+    <div id="log" class="bg-white border rounded p-2 h-32 overflow-auto text-sm"></div>
+</div>
+
+<!-- 이력 조회 -->
+<div class="w-full max-w-5xl mb-6 bg-white border rounded p-4">
+    <div class="flex gap-3 items-center mb-2">
+        <span class="font-semibold text-gray-700">이력 조회</span>
+        <input id="historyNodeId" type="number" placeholder="Node ID"
+               class="border rounded p-1 w-24 text-sm">
+        <button onclick="fetchHistory()"
+                class="px-3 py-1 bg-purple-500 text-white rounded text-sm hover:bg-purple-600">조회</button>
+    </div>
+    <div id="historyResult" class="text-sm text-gray-600 overflow-auto max-h-40"></div>
+</div>
+
+<!-- 메모 보드 -->
+<div id="memoBoard" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 w-full max-w-5xl"></div>
+
+<script>
+    let client = null;
+    let sessionId = null;
+    let memos = [];
+
+    function log(message, type = "info") {
+        const logBox = document.getElementById("log");
+        const div = document.createElement("div");
+        const color = { info: "text-gray-700", success: "text-green-600", error: "text-red-600", send: "text-blue-600" }[type];
+        div.className = color;
+        div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        logBox.appendChild(div);
+        logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    function clearLog() {
+        document.getElementById("log").innerHTML = "";
+    }
+
+    function connect() {
+        const planId = document.getElementById("planId").value;
+        const token = document.getElementById("jwtToken").value.trim();
+        if (!planId) return alert("Plan ID를 입력하세요");
+
+        const connectHeaders = {};
+        if (token) {
+            connectHeaders["Authorization"] = `Bearer ${token}`;
+            log(`🔑 JWT 포함하여 연결 시도`, "info");
+        } else {
+            log(`👤 토큰 없이 게스트로 연결 시도`, "info");
+        }
+
+        client = new StompJs.Client({
+            webSocketFactory: () => new SockJS("http://localhost:8080/ws"),
+            connectHeaders,
+            reconnectDelay: 0,
+            onStompError: (frame) => {
+                log(`❌ STOMP ERROR: ${frame.headers?.message || JSON.stringify(frame.headers)}`, "error");
+            }
+        });
+
+        client.onConnect = () => {
+            const url = client.webSocket._transport.url;
+            const match = /\/([^\/]+)\/websocket/.exec(url);
+            sessionId = match ? match[1] : "unknown";
+            log(`✅ Connected | 세션: ${sessionId} | ${token ? "인증됨" : "게스트"}`, "success");
+
+            // 에러 구독 (인가 실패 등)
+            client.subscribe(`/user/queue/errors`, (msg) => {
+                const err = JSON.parse(msg.body);
+                log(`🚨 ERROR [${err.code}]: ${err.message}`, "error");
+            });
+
+            // 메모 구독
+            client.subscribe(`/topic/plans/${planId}/memos`, (msg) => {
+                const payload = JSON.parse(msg.body);
+                if (payload.senderSessionId && payload.senderSessionId === sessionId) {
+                    log("🔁 자기 세션 메시지 무시", "info");
+                    return;
+                }
+                log(`📩 [Memo] ${payload.type}`, "info");
+                switch (payload.type) {
+                    case "INIT":   memos = payload.MEMO || []; break;
+                    case "CREATE": memos.push(payload.MEMO); break;
+                    case "UPDATE":
+                        const idx = memos.findIndex(m => m.id === payload.MEMO.id);
+                        if (idx !== -1) memos[idx] = payload.MEMO; else memos.push(payload.MEMO);
+                        break;
+                    case "DELETE": memos = memos.filter(m => m.id !== payload.MEMO); break;
+                }
+                renderMemos();
+            });
+
+            publish(`/memos/init`);
+        };
+
+        client.activate();
+    }
+
+    function disconnect() {
+        if (client) { client.deactivate(); log("🔌 Disconnected", "error"); }
+    }
+
+    function publish(dest, body = {}) {
+        const planId = document.getElementById("planId").value;
+        if (!client || !client.connected) return alert("먼저 연결하세요");
+        client.publish({
+            destination: `/app/plans/${planId}${dest}`,
+            body: JSON.stringify(body),
+            headers: { "content-type": "application/json" }
+        });
+        log(`➡️ Sent: ${dest}`, "send");
+    }
+
+    function createMemoCard() {
+        publish(`/memos/create`, {
+            title: "새 메모", content: "",
+            waypointId: null, routeId: null,
+            xPosition: 50 + Math.random() * 200,
+            yPosition: 50 + Math.random() * 200
+        });
+    }
+
+    function updateMemo(id, data) { publish(`/memos/${id}/update`, data); }
+    function deleteMemo(id) { publish(`/memos/${id}/delete`); }
+
+    async function fetchHistory() {
+        const planId = document.getElementById("planId").value;
+        const nodeId = document.getElementById("historyNodeId").value;
+        const token = document.getElementById("jwtToken").value.trim();
+        if (!nodeId) return alert("Node ID를 입력하세요");
+
+        const headers = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+
+        try {
+            const res = await fetch(`/plans/${planId}/nodes/${nodeId}/history?nodeSort=MEMO`, { headers });
+            const result = document.getElementById("historyResult");
+            if (!res.ok) {
+                const err = await res.json();
+                result.innerHTML = `<span class="text-red-500">❌ [${err.code}] ${err.message}</span>`;
+                return;
+            }
+            const data = await res.json();
+            if (data.length === 0) {
+                result.innerHTML = `<span class="text-gray-400">이력 없음</span>`;
+                return;
+            }
+            result.innerHTML = data.map((h, i) =>
+                `<div class="border-b py-1">
+                    <span class="text-purple-600 font-semibold">#${i + 1}</span>
+                    memberId: <b>${h.memberId}</b> |
+                    editedAt: <b>${new Date(h.editedAt).toLocaleString()}</b>
+                    <details class="text-xs text-gray-500 mt-1">
+                        <summary>snapshot</summary>
+                        <pre class="bg-gray-50 p-1 rounded overflow-auto">${JSON.stringify(JSON.parse(h.snapshot), null, 2)}</pre>
+                    </details>
+                </div>`
+            ).join("");
+        } catch (e) {
+            document.getElementById("historyResult").innerHTML = `<span class="text-red-500">요청 실패: ${e.message}</span>`;
+        }
+    }
+
+    function renderMemos() {
+        const board = document.getElementById("memoBoard");
+        board.innerHTML = "";
+        memos.forEach(memo => {
+            const card = document.createElement("div");
+            card.className = "bg-white border rounded-lg shadow p-4 flex flex-col gap-2";
+
+            const idLabel = document.createElement("span");
+            idLabel.className = "text-xs text-gray-400";
+            idLabel.textContent = `ID: ${memo.id}`;
+
+            const titleInput = document.createElement("input");
+            titleInput.className = "border-b p-1 text-purple-700 font-semibold focus:outline-none focus:border-purple-500";
+            titleInput.value = memo.title;
+            titleInput.placeholder = "제목 입력";
+
+            const contentArea = document.createElement("textarea");
+            contentArea.className = "border rounded p-2 text-sm text-gray-700 focus:outline-none focus:border-purple-500";
+            contentArea.rows = 4;
+            contentArea.placeholder = "내용 입력...";
+            contentArea.value = memo.content || "";
+
+            const btnRow = document.createElement("div");
+            btnRow.className = "flex gap-2 justify-end";
+
+            const historyBtn = document.createElement("button");
+            historyBtn.className = "bg-purple-100 hover:bg-purple-200 text-purple-700 text-xs px-2 py-1 rounded";
+            historyBtn.textContent = "이력";
+            historyBtn.onclick = () => {
+                document.getElementById("historyNodeId").value = memo.id;
+                fetchHistory();
+                window.scrollTo({ top: 0, behavior: "smooth" });
+            };
+
+            const deleteBtn = document.createElement("button");
+            deleteBtn.className = "bg-red-500 hover:bg-red-600 text-white text-xs px-2 py-1 rounded";
+            deleteBtn.textContent = "삭제";
+            deleteBtn.onclick = () => deleteMemo(memo.id);
+
+            let typingTimer;
+            function sendUpdate() {
+                clearTimeout(typingTimer);
+                typingTimer = setTimeout(() => {
+                    updateMemo(memo.id, {
+                        id: memo.id,
+                        title: titleInput.value.trim(),
+                        content: contentArea.value.trim(),
+                        waypointId: memo.waypointId ?? null,
+                        routeId: memo.routeId ?? null,
+                        xPosition: memo.xPosition ?? 0,
+                        yPosition: memo.yPosition ?? 0
+                    });
+                    log(`✏️ Memo ${memo.id} 수정 전송`, "send");
+                }, 200);
+            }
+
+            titleInput.addEventListener("input", sendUpdate);
+            contentArea.addEventListener("input", sendUpdate);
+
+            btnRow.appendChild(historyBtn);
+            btnRow.appendChild(deleteBtn);
+            card.appendChild(idLabel);
+            card.appendChild(titleInput);
+            card.appendChild(contentArea);
+            card.appendChild(btnRow);
+            board.appendChild(card);
+        });
+    }
+</script>
+
+</body>
+</html>

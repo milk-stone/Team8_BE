@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Gift Event Test</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center p-6">
+
+<h1 class="text-2xl font-bold mb-6">🎁 선착순 Gift 이벤트 테스트</h1>
+
+<div class="w-full max-w-2xl space-y-6">
+
+    <!-- 공통 설정 -->
+    <div class="bg-white border rounded p-4 space-y-3">
+        <h2 class="font-semibold text-gray-700">공통 설정</h2>
+        <div class="flex gap-3 items-start">
+            <div class="flex flex-col gap-1">
+                <label class="text-xs text-gray-500">Plan ID</label>
+                <input id="planId" type="number" value="1"
+                       class="border rounded p-2 w-28">
+            </div>
+            <div class="flex flex-col gap-1 flex-1">
+                <label class="text-xs text-gray-500">JWT Token — 로그인 후 발급받은 액세스 토큰</label>
+                <input id="jwtToken" type="text" placeholder="eyJhbGci..."
+                       class="border rounded p-2 text-sm">
+            </div>
+        </div>
+    </div>
+
+    <!-- 이벤트 생성 (Plan 주인만) -->
+    <div class="bg-white border rounded p-4 space-y-3">
+        <h2 class="font-semibold text-gray-700">이벤트 생성 <span class="text-xs text-gray-400">(Plan 주인만 가능)</span></h2>
+        <div class="flex gap-3 items-end">
+            <div class="flex flex-col gap-1">
+                <label class="text-xs text-gray-500">총 수량 — 선착순 몇 명에게 지급할지</label>
+                <input id="totalCount" type="number" value="3"
+                       class="border rounded p-2 w-28">
+            </div>
+            <div class="flex flex-col gap-1 flex-1">
+                <label class="text-xs text-gray-500">선물 내용 — 예: 소원권 1회, 스타벅스 아메리카노</label>
+                <input id="content" type="text" placeholder="소원권 1회"
+                       class="border rounded p-2">
+            </div>
+            <button onclick="createGiftEvent()"
+                    class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">생성</button>
+        </div>
+    </div>
+
+    <!-- 이벤트 조회 -->
+    <div class="bg-white border rounded p-4 space-y-3">
+        <h2 class="font-semibold text-gray-700">이벤트 조회</h2>
+        <div class="flex gap-3 items-end">
+            <div class="flex flex-col gap-1">
+                <label class="text-xs text-gray-500">Gift Event ID — 생성 후 자동 입력됨</label>
+                <input id="eventId" type="number" value="1"
+                       class="border rounded p-2 w-28">
+            </div>
+            <button onclick="getEvent()"
+                    class="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600">조회</button>
+        </div>
+        <div id="eventInfo" class="text-sm text-gray-600 bg-gray-50 rounded p-3 hidden"></div>
+    </div>
+
+    <!-- 선착순 수령 -->
+    <div class="bg-white border rounded p-4 space-y-3">
+        <h2 class="font-semibold text-gray-700">선착순 수령 <span class="text-xs text-gray-400">(Plan 참가 멤버만 가능)</span></h2>
+        <div class="flex gap-3 items-end">
+            <div class="flex flex-col gap-1">
+                <label class="text-xs text-gray-500">Gift Event ID — 수령할 이벤트 ID</label>
+                <input id="claimEventId" type="number" value="1"
+                       class="border rounded p-2 w-28">
+            </div>
+            <button onclick="claimGift()"
+                    class="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600">수령</button>
+        </div>
+    </div>
+
+    <!-- 동시성 테스트 -->
+    <div class="bg-white border rounded p-4 space-y-3">
+        <h2 class="font-semibold text-gray-700">동시성 테스트 <span class="text-xs text-gray-400">여러 사용자가 동시에 요청</span></h2>
+        <p class="text-xs text-gray-400">각 줄에 토큰을 하나씩 입력 (= 각각 다른 사용자). 모두 동시에 수령 요청을 보냄 → 총 수량만큼만 성공해야 정상</p>
+        <div class="flex gap-3 items-end">
+            <div class="flex flex-col gap-1">
+                <label class="text-xs text-gray-500">Gift Event ID</label>
+                <input id="concurrentEventId" type="number" value="1"
+                       class="border rounded p-2 w-28">
+            </div>
+            <div class="flex flex-col gap-1 flex-1">
+                <label class="text-xs text-gray-500">사용자 토큰 목록 (한 줄에 하나씩)</label>
+                <textarea id="concurrentTokens" rows="4" placeholder="eyJhbGci... (사용자 1)&#10;eyJhbGci... (사용자 2)&#10;eyJhbGci... (사용자 3)"
+                          class="border rounded p-2 text-xs font-mono w-full"></textarea>
+            </div>
+        </div>
+        <button onclick="claimConcurrent()"
+                class="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600">동시 수령 요청</button>
+    </div>
+
+    <!-- 로그 -->
+    <div class="bg-white border rounded p-4">
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="font-semibold text-gray-700">로그</h2>
+            <button onclick="clearLog()" class="text-xs text-gray-400 hover:text-gray-600">지우기</button>
+        </div>
+        <div id="log" class="bg-gray-50 rounded p-3 h-48 overflow-auto text-sm font-mono space-y-1"></div>
+    </div>
+
+</div>
+
+<script>
+    const BASE_URL = 'http://localhost:8080';
+
+    function getHeaders() {
+        const token = document.getElementById('jwtToken').value.trim();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = 'Bearer ' + token;
+        return headers;
+    }
+
+    function log(msg, type = 'info') {
+        const el = document.getElementById('log');
+        const colors = { info: 'text-gray-700', success: 'text-green-600', error: 'text-red-500' };
+        const time = new Date().toLocaleTimeString();
+        el.innerHTML += `<div class="${colors[type]}">[${time}] ${msg}</div>`;
+        el.scrollTop = el.scrollHeight;
+    }
+
+    function clearLog() {
+        document.getElementById('log').innerHTML = '';
+    }
+
+    async function createGiftEvent() {
+        const planId = document.getElementById('planId').value;
+        const totalCount = parseInt(document.getElementById('totalCount').value);
+        const content = document.getElementById('content').value.trim();
+
+        try {
+            const res = await fetch(`${BASE_URL}/v1/plans/${planId}/gift-events`, {
+                method: 'POST',
+                headers: getHeaders(),
+                body: JSON.stringify({ totalCount, content })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                log(`이벤트 생성 성공 → id=${data.id}, 총 ${data.totalCount}장, 내용: ${data.content}`, 'success');
+                document.getElementById('eventId').value = data.id;
+                document.getElementById('claimEventId').value = data.id;
+            } else {
+                log(`생성 실패 → ${data.message || JSON.stringify(data)}`, 'error');
+            }
+        } catch (e) {
+            log(`오류: ${e.message}`, 'error');
+        }
+    }
+
+    async function getEvent() {
+        const planId = document.getElementById('planId').value;
+        const eventId = document.getElementById('eventId').value;
+
+        try {
+            const res = await fetch(`${BASE_URL}/v1/plans/${planId}/gift-events/${eventId}`, {
+                headers: getHeaders()
+            });
+            const data = await res.json();
+            if (res.ok) {
+                const info = document.getElementById('eventInfo');
+                info.classList.remove('hidden');
+                info.innerHTML = `
+                    <div>이벤트 ID: <b>${data.id}</b></div>
+                    <div>총 수량: <b>${data.totalCount}</b>장</div>
+                    <div>잔여 수량: <b class="${data.remainingCount === 0 ? 'text-red-500' : 'text-green-600'}">${data.remainingCount}</b>장</div>
+                    <div>선물 내용: <b>${data.content}</b></div>
+                `;
+                log(`이벤트 조회 → 잔여 ${data.remainingCount}/${data.totalCount}장, 내용: ${data.content}`, 'info');
+            } else {
+                log(`조회 실패 → ${data.message || JSON.stringify(data)}`, 'error');
+            }
+        } catch (e) {
+            log(`오류: ${e.message}`, 'error');
+        }
+    }
+
+    async function claimGift() {
+        const planId = document.getElementById('planId').value;
+        const eventId = document.getElementById('claimEventId').value;
+
+        try {
+            const res = await fetch(`${BASE_URL}/v1/plans/${planId}/gift-events/${eventId}/claim`, {
+                method: 'POST',
+                headers: getHeaders()
+            });
+            const data = await res.json();
+            if (res.ok) {
+                log(`수령 성공 → giftId=${data.id}, issuedAt=${data.issuedAt}`, 'success');
+            } else {
+                log(`수령 실패 → ${data.message || JSON.stringify(data)}`, 'error');
+            }
+        } catch (e) {
+            log(`오류: ${e.message}`, 'error');
+        }
+    }
+
+    async function claimConcurrent() {
+        const planId = document.getElementById('planId').value;
+        const eventId = document.getElementById('concurrentEventId').value;
+        const tokens = document.getElementById('concurrentTokens').value
+            .split('\n')
+            .map(t => t.trim())
+            .filter(t => t.length > 0);
+
+        if (tokens.length === 0) {
+            log('토큰을 1개 이상 입력해주세요.', 'error');
+            return;
+        }
+
+        log(`동시 요청 시작 — ${tokens.length}명, eventId=${eventId}`, 'info');
+
+        const requests = tokens.map((token, i) =>
+            fetch(`${BASE_URL}/v1/plans/${planId}/gift-events/${eventId}/claim`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                }
+            }).then(async res => {
+                const data = await res.json();
+                return { i: i + 1, ok: res.ok, data };
+            })
+        );
+
+        const results = await Promise.all(requests);
+        results.forEach(({ i, ok, data }) => {
+            if (ok) {
+                log(`사용자 ${i} → 수령 성공 (giftId=${data.id})`, 'success');
+            } else {
+                log(`사용자 ${i} → 실패 (${data.message || data.code})`, 'error');
+            }
+        });
+
+        await getEvent();
+    }
+</script>
+
+</body>
+</html>

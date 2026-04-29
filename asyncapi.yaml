@@ -1,0 +1,516 @@
+asyncapi: 3.0.0
+info:
+  title: Journey Planner Websocket API
+  version: 1.0.0
+  description: |
+    STOMP over WebSocket을 사용한 실시간 여행 계획(waypoints, memos, routes, travelers) 동기화 API 명세입니다.
+    클라이언트는 특정 주소('/app/...')로 명령(Command)을 발행(Publish)하고, '/topic/...' 주소를 구독(Subscribe)하여 서버로부터 발생하는 이벤트를 수신합니다.
+
+servers:
+  production:
+    host: 'localhost:8080'
+    pathname: /ws
+    protocol: stomp
+    description: 개발 및 프로덕션 WebSocket 서버
+
+channels:
+  #============ Waypoints: Server -> Client (Events) ============
+  waypointsTopic:
+    address: /topic/plans/{planId}/waypoints
+    summary: Waypoint와 관련된 모든 이벤트가 발행되는 채널입니다. 클라이언트는 이 채널을 구독해야 합니다.
+    messages:
+      waypointInit:
+        $ref: '#/components/messages/WaypointInit'
+      waypointCreate:
+        $ref: '#/components/messages/WaypointCreate'
+      waypointUpdate:
+        $ref: '#/components/messages/WaypointUpdate'
+      waypointDelete:
+        $ref: '#/components/messages/WaypointDelete'
+    parameters:
+      planId:
+        $ref: '#/components/parameters/planId'
+
+  #============ Waypoints: Client -> Server (Commands) ============
+  waypointInitChannel:
+    address: /app/plans/{planId}/waypoints/init
+    summary: 특정 여행 계획의 전체 Waypoint 목록을 요청하는 채널입니다.
+    parameters: { $ref: '#/components/parameters/planId' }
+  waypointCreateChannel:
+    address: /app/plans/{planId}/waypoints/create
+    summary: 새로운 Waypoint 생성을 요청하는 채널입니다.
+    messages: { create: { $ref: '#/components/messages/WaypointCreationRequest' } }
+    parameters: { $ref: '#/components/parameters/planId' }
+  waypointUpdateChannel:
+    address: /app/plans/{planId}/waypoints/{waypointId}/update
+    summary: 기존 Waypoint 수정을 요청하는 채널입니다.
+    messages: { update: { $ref: '#/components/messages/WaypointUpdateRequest' } }
+    parameters:
+      planId: { $ref: '#/components/parameters/planId' }
+      waypointId: { $ref: '#/components/parameters/waypointId' }
+  waypointDeleteChannel:
+    address: /app/plans/{planId}/waypoints/{waypointId}/delete
+    summary: Waypoint 삭제를 요청하는 채널입니다.
+    parameters:
+      planId: { $ref: '#/components/parameters/planId' }
+      waypointId: { $ref: '#/components/parameters/waypointId' }
+
+  #============ Memos: Server -> Client (Events) ============
+  memosTopic:
+    address: /topic/plans/{planId}/memos
+    summary: Memo와 관련된 모든 이벤트가 발행되는 채널입니다.
+    messages:
+      memoInit:
+        $ref: '#/components/messages/MemoInit'
+      memoCreate:
+        $ref: '#/components/messages/MemoCreate'
+      memoUpdate:
+        $ref: '#/components/messages/MemoUpdate'
+      memoDelete:
+        $ref: '#/components/messages/MemoDelete'
+    parameters: { $ref: '#/components/parameters/planId' }
+
+  #============ Memos: Client -> Server (Commands) ============
+  memoInitChannel:
+    address: /app/plans/{planId}/memos/init
+    summary: 전체 Memo 목록을 요청하는 채널입니다.
+    parameters: { $ref: '#/components/parameters/planId' }
+  memoCreateChannel:
+    address: /app/plans/{planId}/memos/create
+    summary: 새로운 Memo 생성을 요청하는 채널입니다.
+    messages: { create: { $ref: '#/components/messages/MemoCreationRequest' } }
+    parameters: { $ref: '#/components/parameters/planId' }
+  memoUpdateChannel:
+    address: /app/plans/{planId}/memos/{memoId}/update
+    summary: 기존 Memo 수정을 요청하는 채널입니다.
+    messages: { update: { $ref: '#/components/messages/MemoUpdateRequest' } }
+    parameters:
+      planId: { $ref: '#/components/parameters/planId' }
+      memoId: { $ref: '#/components/parameters/memoId' }
+  memoDeleteChannel:
+    address: /app/plans/{planId}/memos/{memoId}/delete
+    summary: Memo 삭제를 요청하는 채널입니다.
+    parameters:
+      planId: { $ref: '#/components/parameters/planId' }
+      memoId: { $ref: '#/components/parameters/memoId' }
+
+  #============ Routes: Server -> Client (Events) ============
+  routesTopic:
+    address: /topic/plans/{planId}/routes
+    summary: Route와 관련된 모든 이벤트가 발행되는 채널입니다.
+    messages:
+      routeInit:
+        $ref: '#/components/messages/RouteInit'
+      routeCreate:
+        $ref: '#/components/messages/RouteCreate'
+      routeUpdate:
+        $ref: '#/components/messages/RouteUpdate'
+      routeDelete:
+        $ref: '#/components/messages/RouteDelete'
+    parameters: { $ref: '#/components/parameters/planId' }
+
+  #============ Routes: Client -> Server (Commands) ============
+  routeInitChannel:
+    address: /app/plans/{planId}/routes/init
+    summary: 전체 Route 목록을 요청하는 채널입니다.
+    parameters: { $ref: '#/components/parameters/planId' }
+  routeCreateChannel:
+    address: /app/plans/{planId}/routes/create
+    summary: 새로운 Route 생성을 요청하는 채널입니다.
+    messages: { create: { $ref: '#/components/messages/RouteCreationRequest' } }
+    parameters: { $ref: '#/components/parameters/planId' }
+  routeUpdateChannel:
+    address: /app/plans/{planId}/routes/{routeId}/update
+    summary: 기존 Route 수정을 요청하는 채널입니다.
+    messages: { update: { $ref: '#/components/messages/RouteUpdateRequest' } }
+    parameters:
+      planId: { $ref: '#/components/parameters/planId' }
+      routeId: { $ref: '#/components/parameters/routeId' }
+  routeDeleteChannel:
+    address: /app/plans/{planId}/routes/{routeId}/delete
+    summary: Route 삭제를 요청하는 채널입니다.
+    parameters:
+      planId: { $ref: '#/components/parameters/planId' }
+      routeId: { $ref: '#/components/parameters/routeId' }
+
+  #============ Travelers: Server -> Client (Events) ============
+  travelersTopic:
+    address: /topic/plans/{planId}/travelers
+    summary: Traveler와 관련된 모든 이벤트가 발행되는 채널입니다.
+    messages:
+      travelerInit:
+        $ref: '#/components/messages/TravelerInit'
+      travelerInvite:
+        $ref: '#/components/messages/TravelerInvite'
+      travelerAccepted:
+        $ref: '#/components/messages/TravelerAccepted'
+      travelerDelete:
+        $ref: '#/components/messages/TravelerDelete'
+    parameters: { $ref: '#/components/parameters/planId' }
+
+  #============ Travelers: Client -> Server (Commands) ============
+  travelerInitChannel:
+    address: /app/plans/{planId}/travelers/init
+    summary: 전체 Traveler 목록을 요청하는 채널입니다.
+    parameters: { $ref: '#/components/parameters/planId' }
+  travelerDeleteChannel:
+    address: /app/plans/{planId}/travelers/{travelerId}/delete
+    summary: Traveler 삭제를 요청하는 채널입니다.
+    parameters:
+      planId: { $ref: '#/components/parameters/planId' }
+      travelerId: { $ref: '#/components/parameters/travelerId' }
+
+operations:
+  #============ Waypoint Operations ============
+  subscribeToWaypointEvents:
+    action: receive
+    channel: { $ref: '#/channels/waypointsTopic' }
+    summary: 'Waypoint 관련 모든 이벤트(생성, 수정, 삭제 등)를 구독합니다.'
+  publishWaypointInit:
+    action: send
+    channel: { $ref: '#/channels/waypointInitChannel' }
+    summary: '서버에 Waypoint 목록 요청을 발행합니다. (Payload 없음)'
+    reply:
+      channel: { $ref: '#/channels/waypointsTopic' }
+      messages: [ { $ref: '#/channels/waypointsTopic/messages/waypointInit' } ]
+  publishWaypointCreate:
+    action: send
+    channel: { $ref: '#/channels/waypointCreateChannel' }
+    summary: '새로운 Waypoint 생성 요청을 발행합니다. 성공 시 모든 구독자에게 이벤트가 발행됩니다.'
+    messages: [ { $ref: '#/channels/waypointCreateChannel/messages/create' } ]
+    reply:
+      channel: { $ref: '#/channels/waypointsTopic' }
+      messages: [ { $ref: '#/channels/waypointsTopic/messages/waypointCreate' } ]
+  publishWaypointUpdate:
+    action: send
+    channel: { $ref: '#/channels/waypointUpdateChannel' }
+    summary: '기존 Waypoint 수정 요청을 발행합니다. 성공 시 모든 구독자에게 이벤트가 발행됩니다.'
+    messages: [ { $ref: '#/channels/waypointUpdateChannel/messages/update' } ]
+    reply:
+      channel: { $ref: '#/channels/waypointsTopic' }
+      messages: [ { $ref: '#/channels/waypointsTopic/messages/waypointUpdate' } ]
+  publishWaypointDelete:
+    action: send
+    channel: { $ref: '#/channels/waypointDeleteChannel' }
+    summary: 'Waypoint 삭제 요청을 발행합니다. (Payload 없음)'
+    reply:
+      channel: { $ref: '#/channels/waypointsTopic' }
+      messages: [ { $ref: '#/channels/waypointsTopic/messages/waypointDelete' } ]
+
+  #============ Memo Operations ============
+  subscribeToMemoEvents:
+    action: receive
+    channel: { $ref: '#/channels/memosTopic' }
+    summary: 'Memo 관련 모든 이벤트를 구독합니다.'
+  publishMemoInit:
+    action: send
+    channel: { $ref: '#/channels/memoInitChannel' }
+    summary: '서버에 Memo 목록 요청을 발행합니다.'
+    reply:
+      channel: { $ref: '#/channels/memosTopic' }
+      messages: [ { $ref: '#/channels/memosTopic/messages/memoInit' } ]
+  publishMemoCreate:
+    action: send
+    channel: { $ref: '#/channels/memoCreateChannel' }
+    summary: '새로운 Memo 생성 요청을 발행합니다.'
+    messages: [ { $ref: '#/channels/memoCreateChannel/messages/create' } ]
+    reply:
+      channel: { $ref: '#/channels/memosTopic' }
+      messages: [ { $ref: '#/channels/memosTopic/messages/memoCreate' } ]
+  publishMemoUpdate:
+    action: send
+    channel: { $ref: '#/channels/memoUpdateChannel' }
+    summary: '기존 Memo 수정 요청을 발행합니다.'
+    messages: [ { $ref: '#/channels/memoUpdateChannel/messages/update' } ]
+    reply:
+      channel: { $ref: '#/channels/memosTopic' }
+      messages: [ { $ref: '#/channels/memosTopic/messages/memoUpdate' } ]
+  publishMemoDelete:
+    action: send
+    channel: { $ref: '#/channels/memoDeleteChannel' }
+    summary: 'Memo 삭제 요청을 발행합니다.'
+    reply:
+      channel: { $ref: '#/channels/memosTopic' }
+      messages: [ { $ref: '#/channels/memosTopic/messages/memoDelete' } ]
+
+  #============ Route Operations ============
+  subscribeToRouteEvents:
+    action: receive
+    channel: { $ref: '#/channels/routesTopic' }
+    summary: 'Route 관련 모든 이벤트를 구독합니다.'
+  publishRouteInit:
+    action: send
+    channel: { $ref: '#/channels/routeInitChannel' }
+    summary: '서버에 Route 목록 요청을 발행합니다.'
+    reply:
+      channel: { $ref: '#/channels/routesTopic' }
+      messages: [ { $ref: '#/channels/routesTopic/messages/routeInit' } ]
+  publishRouteCreate:
+    action: send
+    channel: { $ref: '#/channels/routeCreateChannel' }
+    summary: '새로운 Route 생성 요청을 발행합니다.'
+    messages: [ { $ref: '#/channels/routeCreateChannel/messages/create' } ]
+    reply:
+      channel: { $ref: '#/channels/routesTopic' }
+      messages: [ { $ref: '#/channels/routesTopic/messages/routeCreate' } ]
+  publishRouteUpdate:
+    action: send
+    channel: { $ref: '#/channels/routeUpdateChannel' }
+    summary: '기존 Route 수정 요청을 발행합니다.'
+    messages: [ { $ref: '#/channels/routeUpdateChannel/messages/update' } ]
+    reply:
+      channel: { $ref: '#/channels/routesTopic' }
+      messages: [ { $ref: '#/channels/routesTopic/messages/routeUpdate' } ]
+  publishRouteDelete:
+    action: send
+    channel: { $ref: '#/channels/routeDeleteChannel' }
+    summary: 'Route 삭제 요청을 발행합니다.'
+    reply:
+      channel: { $ref: '#/channels/routesTopic' }
+      messages: [ { $ref: '#/channels/routesTopic/messages/routeDelete' } ]
+
+  #============ Traveler Operations ============
+  subscribeToTravelerEvents:
+    action: receive
+    channel: { $ref: '#/channels/travelersTopic' }
+    summary: 'Traveler 관련 모든 이벤트를 구독합니다.'
+  publishTravelerInit:
+    action: send
+    channel: { $ref: '#/channels/travelerInitChannel' }
+    summary: '서버에 Traveler 목록 요청을 발행합니다.'
+    reply:
+      channel: { $ref: '#/channels/travelersTopic' }
+      messages: [ { $ref: '#/channels/travelersTopic/messages/travelerInit' } ]
+  publishTravelerDelete:
+    action: send
+    channel: { $ref: '#/channels/travelerDeleteChannel' }
+    summary: 'Traveler 삭제 요청을 발행합니다.'
+    reply:
+      channel: { $ref: '#/channels/travelersTopic' }
+      messages: [ { $ref: '#/channels/travelersTopic/messages/travelerDelete' } ]
+
+components:
+  parameters:
+    planId:
+      description: 계획의 고유 ID
+    waypointId:
+      description: 경유지의 고유 ID
+    memoId:
+      description: 메모의 고유 ID
+    routeId:
+      description: 경로의 고유 ID
+    travelerId:
+      description: 여행자의 고유 ID
+
+  schemas:
+    WaypointRequest:
+      type: object
+      required: [name, address, startTime, endTime, locationCategory, xPosition, yPosition]
+      properties:
+        name: { type: string, description: '경유지 이름', maxLength: 20 }
+        description: { type: string, description: '경유지 설명' }
+        address: { type: string, description: '주소' }
+        startTime: { type: string, format: 'date-time', description: '시작 시각' }
+        endTime: { type: string, format: 'date-time', description: '종료 시각' }
+        locationCategory: { type: string, enum: [DEFAULT, FOOD, CULTURE, ACCOMMODATION, TOUR, TRANSPORTATION], description: '상위 위치 카테고리' }
+        locationSubCategory: { type: string, enum: [DEFAULT, RESTAURANT, CAFE, BAR, MUSEUM, LIBRARY, CENTER, HOTEL, STORE, LANDMARK, ACTIVITY, AIRPORT, TERMINAL, STATION], description: '하위 위치 카테고리' }
+        xPosition: { type: number, format: 'float', description: '화면상 x좌표 (경도)' }
+        yPosition: { type: number, format: 'float', description: '회면상 y좌표 (위도)' }
+    WaypointResponse:
+      allOf:
+        - $ref: '#/components/schemas/WaypointRequest'
+        - type: object
+          properties: { id: { type: integer, format: int64, description: '경유지 ID' } }
+
+    MemoRequest:
+      type: object
+      required: [title, content, xPosition, yPosition]
+      properties:
+        title: { type: string, description: '메모 제목' }
+        content: { type: string, description: '메모 내용' }
+        xPosition: { type: number, format: 'float' }
+        yPosition: { type: number, format: 'float' }
+    MemoResponse:
+      allOf:
+        - $ref: '#/components/schemas/MemoRequest'
+        - type: object
+          properties: { id: { type: integer, format: int64, description: '메모 ID' } }
+
+    RouteRequest:
+      type: object
+      required: [fromWaypointId, toWaypointId, title, duration, vehicleCategory]
+      properties:
+        fromWaypointId: { type: integer, format: int64, description: '출발 경유지 ID' }
+        toWaypointId: { type: integer, format: int64, description: '도착 경유지 ID' }
+        title: { type: string, description: '경로 제목' }
+        description: { type: string, description: '경로 설명' }
+        duration: { type: number, format: 'float', description: '예상 소요 시간(분)', minimum: 0 }
+        vehicleCategory: { type: string, enum: [DEFAULT, WALK, BUS, TAXI, CAR, BICYCLE, AIRPLANE, TRAIN, SHIP, MOTORCYCLE, SCOOTER], description: '이동 수단' }
+    RouteResponse:
+      allOf:
+        - $ref: '#/components/schemas/RouteRequest'
+        - type: object
+          properties:
+            id: { type: integer, format: int64, description: '경로 ID' }
+            planId: { type: integer, format: int64, description: '계획 ID' }
+
+    TravelerResponse:
+      type: object
+      properties:
+        id: { type: integer, format: int64, description: '여행자 ID' }
+        memberId: { type: integer, format: int64, description: '회원 ID' }
+        name: { type: string, description: '이름' }
+        contact: { type: string, description: '연락처' }
+        mbtiType: { type: string, enum: [INTJ, INTP, ENTJ, ENTP, INFJ, INFP, ENFJ, ENFP, ISTJ, ISFJ, ESTJ, ESFJ, ISTP, ISFP, ESTP, ESFP], description: 'MBTI 유형' }
+        status: { type: string, enum: [INVITED, ACCEPTED, DECLINED], description: '초대 상태' }
+        role: { type: string, enum: [PARTICIPANT, OWNER], description: '역할' }
+
+  messages:
+    #============ Waypoint Messages ============
+    WaypointCreationRequest:
+      summary: 새 경유지 생성을 위한 요청 페이로드
+      payload: { $ref: '#/components/schemas/WaypointRequest' }
+    WaypointUpdateRequest:
+      summary: 기존 경유지 수정을 위한 요청 페이로드
+      payload: { $ref: '#/components/schemas/WaypointRequest' }
+
+    WaypointInit:
+      summary: Waypoint 전체 목록 이벤트. init 요청에 대한 응답으로 발행됩니다.
+      payload:
+        type: object
+        properties:
+          type: { const: WAYPOINT_INIT }
+          waypoints:
+            type: array
+            items: { $ref: '#/components/schemas/WaypointResponse' }
+    WaypointCreate:
+      summary: Waypoint 생성 이벤트. create 요청에 대한 응답으로 발행됩니다.
+      payload:
+        type: object
+        properties:
+          type: { const: WAYPOINT_CREATE }
+          waypoint: { $ref: '#/components/schemas/WaypointResponse' }
+    WaypointUpdate:
+      summary: Waypoint 수정 이벤트. update 요청에 대한 응답으로 발행됩니다.
+      payload:
+        type: object
+        properties:
+          type: { const: WAYPOINT_UPDATE }
+          waypoint: { $ref: '#/components/schemas/WaypointResponse' }
+    WaypointDelete:
+      summary: Waypoint 삭제 이벤트. delete 요청에 대한 응답으로 발행됩니다.
+      payload:
+        type: object
+        properties:
+          type: { const: WAYPOINT_DELETE }
+          waypointId: { type: integer, format: int64 }
+
+    #============ Memo Messages ============
+    MemoCreationRequest:
+      summary: 새 메모 생성을 위한 요청 페이로드
+      payload: { $ref: '#/components/schemas/MemoRequest' }
+    MemoUpdateRequest:
+      summary: 기존 메모 수정을 위한 요청 페이로드
+      payload: { $ref: '#/components/schemas/MemoRequest' }
+
+    MemoInit:
+      summary: Memo 전체 목록 이벤트.
+      payload:
+        type: object
+        properties:
+          type: { const: MEMO_INIT }
+          memos:
+            type: array
+            items: { $ref: '#/components/schemas/MemoResponse' }
+    MemoCreate:
+      summary: Memo 생성 이벤트.
+      payload:
+        type: object
+        properties:
+          type: { const: MEMO_CREATE }
+          memo: { $ref: '#/components/schemas/MemoResponse' }
+    MemoUpdate:
+      summary: Memo 수정 이벤트.
+      payload:
+        type: object
+        properties:
+          type: { const: MEMO_UPDATE }
+          memo: { $ref: '#/components/schemas/MemoResponse' }
+    MemoDelete:
+      summary: Memo 삭제 이벤트.
+      payload:
+        type: object
+        properties:
+          type: { const: MEMO_DELETE }
+          memoId: { type: integer, format: int64 }
+
+    #============ Route Messages ============
+    RouteCreationRequest:
+      summary: 새 경로 생성을 위한 요청 페이로드
+      payload: { $ref: '#/components/schemas/RouteRequest' }
+    RouteUpdateRequest:
+      summary: 기존 경로 수정을 위한 요청 페이로드
+      payload: { $ref: '#/components/schemas/RouteRequest' }
+
+    RouteInit:
+      summary: Route 전체 목록 이벤트.
+      payload:
+        type: object
+        properties:
+          type: { const: ROUTE_INIT }
+          routes:
+            type: array
+            items: { $ref: '#/components/schemas/RouteResponse' }
+    RouteCreate:
+      summary: Route 생성 이벤트.
+      payload:
+        type: object
+        properties:
+          type: { const: ROUTE_CREATE }
+          route: { $ref: '#/components/schemas/RouteResponse' }
+    RouteUpdate:
+      summary: Route 수정 이벤트.
+      payload:
+        type: object
+        properties:
+          type: { const: ROUTE_UPDATE }
+          route: { $ref: '#/components/schemas/RouteResponse' }
+    RouteDelete:
+      summary: Route 삭제 이벤트.
+      payload:
+        type: object
+        properties:
+          type: { const: ROUTE_DELETE }
+          routeId: { type: integer, format: int64 }
+
+    #============ Traveler Messages ============
+    TravelerInit:
+      summary: Traveler 전체 목록 이벤트. init 요청에 대한 응답으로 발행됩니다.
+      payload:
+        type: object
+        properties:
+          type: { const: TRAVELER_INIT }
+          travelers:
+            type: array
+            items: { $ref: '#/components/schemas/TravelerResponse' }
+    TravelerInvite:
+      summary: Traveler 초대 이벤트. REST API를 통해 초대가 이루어지면 발행됩니다.
+      payload:
+        type: object
+        properties:
+          type: { const: TRAVELER_INVITE }
+          traveler: { $ref: '#/components/schemas/TravelerResponse' }
+    TravelerAccepted:
+      summary: Traveler 초대 수락 이벤트. REST API를 통해 초대를 수락하면 발행됩니다.
+      payload:
+        type: object
+        properties:
+          type: { const: TRAVELER_ACCEPTED }
+          traveler: { $ref: '#/components/schemas/TravelerResponse' }
+    TravelerDelete:
+      summary: Traveler 삭제 이벤트. delete 요청에 대한 응답으로 발행됩니다.
+      payload:
+        type: object
+        properties:
+          type: { const: TRAVELER_DELETE }
+          travelerId: { type: integer, format: int64 }
